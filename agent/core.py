@@ -2,18 +2,28 @@ from typing_extensions import TypedDict
 import pandas as pd
 from typing import List,Dict
 
-from datetime import datetime
-import os
+from .data.generate_data import SyntheticData
 
-SAVE_PATH = "/sim_data"
+from datetime import datetime
+
+
+from google import genai
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+SAVE_PATH = "./sim_data"
+
+MODEL_NAME = "gemini-2.5-flash-lite"
+llm_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+sd = SyntheticData(save_path=SAVE_PATH)
 
 try:
     sim_path = os.path.join(SAVE_PATH,"simulation.csv")
-    report_path = os.path.join(SAVE_PATH,"reports.csv")
+    
 
     sim_df = pd.read_csv(sim_path)
-    report_df = pd.read_csv(report_path)
-
 except Exception as e:
     print(f"ERROR: {str(e)}")
     exit()
@@ -22,8 +32,9 @@ except Exception as e:
 class State(TypedDict):
     today_date: datetime
     window_data: pd.DataFrame
-    today_data: dict
-    report_data: str
+    today_data: pd.DataFrame
+    report_data: dict
     recommendation: str
+    prev_action: str
     user_action: str
     recommendation_weights: Dict[str,float]

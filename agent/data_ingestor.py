@@ -1,27 +1,86 @@
 import pandas as pd
 
-from core import State,report_df,sim_df
+
+from .core import State,llm_client,sd,MODEL_NAME
+from .utils import parse_model_res
+from google.genai import types
 import datetime
 
-def ingest_data(state:State):
-    today_df = sim_df[sim_df["date"]==state["today_date"]]
 
-    if state["today_date"] in report_df:
-        today_report = report_df.loc[[state["today_date"]]]
-        report_text =  today_report["report"]
-    else:
-        report_text = ""
+def ingest_knowledge(state:State):
+    """Ingests structured data which has been assumed to arrive every 2 weeks"""
+
+    sim_df = sd.generate_data()
+    today_df = sim_df
+    
 
     #updating window
     if state["window_data"].empty:
         state["window_data"] = today_df
     else:
+        # window_data: will have data from last 14 entries
+
         state["window_data"] = pd.concat((state["window_data"],state["today_data"]))
-        recent_dates = sorted(state["window_data"]["date"].unique())[-7:]
+        recent_dates = sorted(state["window_data"]["date"].unique())[-14:]
         state["window_data"] = state["window_data"][state["window_data"]["date"].isin(recent_dates)]
+
     #updating todays data
-    state["today_data"] = today_df.iloc[0].to_dict()
-    #updating todays reports if any
-    state["report_data"] = report_text
+    state["today_date"] = datetime.today()
+    state["today_data"] = sim_df[sim_df["date"]==state["today_date"]]
     
     return state
+    
+
+
+def ingest_daily_reports(state: State):
+    """Ingest and parse daily unstructured reports"""
+    daily_report = sd.generate_reports()
+
+    llm_prompt = f"""
+You are an assistant that extracts structured information from healthcare text reports.
+Your job is to analyze each report and produce a JSON object summarizing the event, even if details are partially missing.
+
+INPUT TEXT: {daily_report}
+
+For input text, output only a valid JSON object with these fields:
+
+hospital: the hospital mentioned, or null if unknown
+
+region: the geographic region or city, or null if not stated
+
+resource: what is affected (oxygen, ventilators, beds, staff, etc.)
+
+event: one of [shortage, restock, maintenance, surge, stable, unknown]
+
+change_estimate_pct: estimated percentage increase or decrease in resource use (integer, may be approximate)
+
+reason: the event or cause described (e.g., “flood”, “heat wave”, “festival crowd”)
+
+severity: serverity of the reason. choose one of [mild,considerable,severe]
+
+confidence: a number from 0 to 1 showing how certain you are about your extraction, based on text clarity and specificity.
+
+1.0 = completely certain
+
+0.5 = partially inferred
+
+0.2 = mostly guessing
+
+If you cannot identify something, return null or unknown, but always include all fields.
+Output JSON only, with no extra text.
+"""
+    res = llm_client.models.generate_content(model = MODEL_NAME,contents=llm_prompt,config=types.GenerateContentConfig(max_output_tokens=2000))
+    res_dict = parse_model_res(res.text)
+
+    if(res_dict["hospital"]==None or res_dict["region"]==None):
+        res_dict["confidence"] -= 0.1
+    if(res_dict["severity"].lower() in ['mild','considerable']):
+        res_dict["confidence"] -= 0.2
+
+    state["report_data"] = res_dict
+    state["today_date"] = datetime.today()
+
+
+
+if __name__ == "__main__":
+    ingest_daily_reports()
