@@ -14,6 +14,7 @@ class SyntheticData:
         self.resources = resourcs
         self.start_date = start_date 
         self.regions = ["north","south","east","west","central"]
+        self.hospitals = [f"hos_{i+1}" for i in range(self.n_hospitals)]
 
     def generate_data(self,seed = 42) :
         """Generates a simulation of n_weeks with random usage spikes and uses given resources"""
@@ -21,14 +22,11 @@ class SyntheticData:
         np.random.seed(seed)
         random.seed(seed)
 
-        hospitals = [f"hos_{i+1}" for i in range(self.n_hospitals)]
-        
-
         start = self.start_date - timedelta(days=14)
         
         data = []
 
-        for hospital in hospitals:
+        for hospital in self.hospitals:
             region = random.choice(self.regions)
             date = start
             for day in range(14):

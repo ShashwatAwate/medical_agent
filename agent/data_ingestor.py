@@ -25,7 +25,7 @@ def ingest_knowledge(state:State):
         state["window_data"] = state["window_data"][state["window_data"]["date"].isin(recent_dates)]
 
     #updating todays data
-    state["today_date"] = datetime.today()
+    state["today_date"] = datetime.datetime.today()
     state["today_data"] = sim_df[sim_df["date"]==state["today_date"]]
     
     return state
@@ -45,26 +45,28 @@ INPUT TEXT: {daily_report}
 For input text, output only a valid JSON object with these fields:
 
 hospital: the hospital mentioned, or null if unknown
-
 region: the geographic region or city, or null if not stated
-
 resource: what is affected (oxygen, ventilators, beds, staff, etc.)
-
 event: one of [shortage, restock, maintenance, surge, stable, unknown]
-
 change_estimate_pct: estimated percentage increase or decrease in resource use (integer, may be approximate)
-
 reason: the event or cause described (e.g., “flood”, “heat wave”, “festival crowd”)
-
-severity: serverity of the reason. choose one of [mild,considerable,severe]
-
+severity: serverity of the reason. choose one of [mild,moderate,severe,critical] mild is lowest severity, critical is highest severity.
 confidence: a number from 0 to 1 showing how certain you are about your extraction, based on text clarity and specificity.
 
 1.0 = completely certain
-
 0.5 = partially inferred
-
 0.2 = mostly guessing
+**JSON format**
+{{
+"hospital":,
+"region":,
+"resource":,
+"event":,
+"change_estimate_pct",
+"reason":,
+"severity":,
+"confidence":,
+}}
 
 If you cannot identify something, return null or unknown, but always include all fields.
 Output JSON only, with no extra text.
@@ -74,12 +76,12 @@ Output JSON only, with no extra text.
 
     if(res_dict["hospital"]==None or res_dict["region"]==None):
         res_dict["confidence"] -= 0.1
-    if(res_dict["severity"].lower() in ['mild','considerable']):
+    if(res_dict["severity"].lower() in ['mild','moderate']):
         res_dict["confidence"] -= 0.2
 
     state["report_data"] = res_dict
-    state["today_date"] = datetime.today()
-
+    state["today_date"] = datetime.datetime.today()
+    return state
 
 
 if __name__ == "__main__":

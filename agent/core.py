@@ -34,7 +34,10 @@ class State(TypedDict):
     window_data: pd.DataFrame
     today_data: pd.DataFrame
     report_data: dict
+    today_forecasts : dict
+    forecast_conclusions: list
     recommendation: str
-    prev_action: str
-    user_action: str
+    user_feedback:str
     recommendation_weights: Dict[str,float]
+    recommendation_meta: dict
+    done: bool
