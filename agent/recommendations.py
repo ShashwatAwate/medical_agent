@@ -1,5 +1,7 @@
 from .core import State,llm_client,MODEL_NAME
-from .utils import parse_model_res
+from .utils import parse_model_res,index,model
+
+from sklearn.metrics.pairwise import cosine_similarity
 
 import pandas as pd
 import datetime
@@ -19,6 +21,7 @@ def apply_offsets(weights,offsets,alpha=0.8):
 def build_recommendations(state: State):
     """Based on the current data and forecasts and previous user interactions, build the recommendations"""
 
+ 
     w_cost = state["recommendation_weights"]["cost"]
     w_coverage = state["recommendation_weights"]["coverage"]
     w_fairness = state["recommendation_weights"]["fairness"]
@@ -27,12 +30,13 @@ def build_recommendations(state: State):
     forecast_summary = state["forecast_conclusions"]
     recommendation = state["recommendation"]
     feedback = state["user_feedback"]
+
     llm_prompt = f"""
 You are a healthcare resource allocation assistant tasked with optimizing resource distribution across hospitals.
 
 Your job: decide how to reallocate resources between hospitals based on forecasted shortages or surpluses.
 
-Current preference weights:
+Current preference weights, if weight is higher, prefer those choices:
 - Cost Efficiency: {w_cost}
 - Coverage: {w_coverage}
 - Fairness: {w_fairness}
@@ -44,6 +48,7 @@ This is the previous given recommendation:
 {recommendation}
 And this is the user feedback for that recommendation:
 {feedback}
+DO NOT give the same recommendation again.
 ---
 
 **Your task:**
@@ -58,6 +63,7 @@ And this is the user feedback for that recommendation:
 4.Do not show weights in your justification
 5.NEVER ASSUME ANYTHING, do not assume values or resource names or hopital names, use them just as they ARE.
 6.NEVER recommend transfer to the same hospital.
+7.Round quantities to INTEGERS.
 ** JSON Format: **
 {{
 "recommendation":"",
@@ -78,6 +84,7 @@ Output should be a concise, readable report.
     res_dict = parse_model_res(res.text)
     print(res_dict)
     state["recommendation"] = res_dict["recommendation"]
+    state["recommendation_justification"] = res_dict["justification"]
     state["recommendation_meta"] = res_dict["meta"]
     return state
 
@@ -87,50 +94,51 @@ def get_feedback(state: State):
     
     feedback = input("give your feedback ")
 
-    if feedback=="quit":
-        state["done"] = True
-        return state
+    feedback = feedback.lower()
+    feedback_words = feedback.split()
+
+    user_approval = False
+    approval_words = ["yes","yes transfer","definitely transfer","ok"]
+    print(f"Before update: {state["recommendation_weights"]}")
+    for word in feedback_words:
+        if word in approval_words:
+            print("INFO: User approved the change")
+            user_approval = True
+            for weight in state["recommendation_weights"].keys():
+                state["recommendation_weights"][weight] += 0.02
+            break
+
+    concepts = {
+    "cost": "concerns about expenses, distance, or transportation costs",
+    "coverage": "ensuring enough resources are available across all hospitals or regions",
+    "fairness": "equal distribution, fairness, or resource equity among hospitals",
+    "urgency": "emergency, immediate need, or life-critical situations"
+    }
+
+    concept_embs = {k: model.encode(v,normalize_embeddings=True) for k,v in concepts.items()}
+    feedback_emb = model.encode(feedback,normalize_embeddings=True).reshape(1,-1)
+    justification_emb = model.encode(state["recommendation_justification"],normalize_embeddings=True).reshape(1,-1)
     
-    """Adjust the recommendation weights based on user feedback"""
 
-    llm_prompt = f"""
-You are an expert feedback analyst. Based on the user feedback, assign required weight offset to following fields.
-[[cost,coverage,fairness,urgency]].
+    delta_max = 0.05
+    for concept,emb in concept_embs.items():
+        feedback_sim = cosine_similarity(feedback_emb,emb.reshape(1,-1))[0][0]
+        justification_sim = cosine_similarity(justification_emb, emb.reshape(1,-1))[0][0]
+        print(f"INFO: feedback_sim: {feedback_sim}, justification_sim:{justification_sim}")
+        sim = 0.4*feedback_sim + 0.6*justification_sim
+        print(f"INFO: overall sim: {sim}")
 
-**START OF FEEDBACK**
-{feedback}
-**END OF FEEDBACK**
+        offset = 0
+        offset = (max(sim,0.08) - 0.08)/(0.6)*delta_max
+        print(f"INFO: offset: {offset}")
+        if(user_approval):
+            state["recommendation_weights"][concept] += float(offset)
+        else:
+            state["recommendation_weights"][concept] -= float(offset)
 
-**Rules**
-1. The offset must be a float value between -0.5 and 0.5.
-2. The absolute value of each offset should normally be at least 0.05 when a clear preference is detected.
-3. Use 0 only if the feedback clearly implies no change.
-4. Only respond in JSON format. DO NOT include any extra reasoning, justification or salutations.
-5. user_approval is either True or False based on whether user accepts or rejects recommendation.
-6. NEVER ASSUME ANYTHING, do not assume values or resource names or hopital names, use them just as they ARE.
+    print(f"After update: {state["recommendation_weights"]}")
 
-** JSON format **
-{{"weights":{{
-    "cost":,
-    "coverage":,
-    "fairness":,
-    "urgency":
-    }},
-    "user_approval":
-}}
-"""
-
-    res = llm_client.models.generate_content(model=MODEL_NAME,contents=llm_prompt)
-    print(res.text)
-    res_dict = parse_model_res(res.text)
-    
-    weights = state["recommendation_weights"]
-    weights = apply_offsets(weights,res_dict["weights"])
-    print(weights)
-    state["recommendation_weights"] = weights
-    state['user_feedback'] = feedback
-
-    if res_dict["user_approval"]==True:
+    if user_approval==True:
 
         resource = state["recommendation_meta"]["resource"]
         from_hos = state["recommendation_meta"]["from"]
@@ -147,8 +155,9 @@ You are an expert feedback analyst. Based on the user feedback, assign required 
         state["window_data"] = state["window_data"][state["window_data"]["date"].isin(recent_dates)]
 
         state["today_data"] = today_df
-        state["sim_date"] += datetime.timedelta(days=1)
-        state["days_since_update"]+=1
+
+    state["sim_date"] += datetime.timedelta(days=1)
+    state["days_since_update"]+=1
 
 
     return state

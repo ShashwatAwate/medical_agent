@@ -39,6 +39,8 @@ class State(TypedDict):
     today_forecasts : dict
     forecast_conclusions: list
     recommendation: str
+    recommendation_justification: str
+    prev_recommendations: dict
     user_feedback:str
     recommendation_weights: Dict[str,float]
     recommendation_meta: dict

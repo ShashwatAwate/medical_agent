@@ -10,7 +10,10 @@ import datetime
 def ingest_knowledge(state:State):
     """Ingests structured data which has been assumed to arrive every 2 weeks"""
 
-    if state["days_since_update"]>=14 or state["window_data"].empty:
+    if state["days_since_update"]>=3 or state["window_data"].empty:
+
+        print("INFO: Recieved new data!")
+        
         sim_df = sd.generate_data()
         today_df = sim_df
     
@@ -78,7 +81,7 @@ Output JSON only, with no extra text.
 
     if(res_dict["hospital"]==None or res_dict["region"]==None):
         res_dict["confidence"] -= 0.1
-    if(res_dict["severity"].lower() in ['mild','moderate']):
+    if((res_dict.get("severity","")).lower() in ['mild','moderate']):
         res_dict["confidence"] -= 0.2
 
     state["report_data"] = res_dict
