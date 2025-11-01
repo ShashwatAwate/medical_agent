@@ -6,8 +6,10 @@ from .core import State,sd
 from .data_ingestor import ingest_knowledge,ingest_daily_reports
 from .forecasting import forecast_data,draw_conclusions
 from .recommendations import build_recommendations,get_feedback
+from .persistence import save_state,load_state
 
-
+import datetime
+import os
 
 graph_builder = StateGraph(State)
 
@@ -19,6 +21,7 @@ graph_builder.add_node(forecast_data)
 graph_builder.add_node(draw_conclusions)
 graph_builder.add_node(build_recommendations)
 graph_builder.add_node(get_feedback)
+graph_builder.add_node(save_state)
 
 #EDGES
 graph_builder.add_edge(START,"ingest_knowledge")
@@ -27,10 +30,13 @@ graph_builder.add_edge("ingest_daily_reports","forecast_data")
 graph_builder.add_edge("forecast_data","draw_conclusions")
 graph_builder.add_edge("draw_conclusions","build_recommendations")
 graph_builder.add_edge("build_recommendations","get_feedback")
-graph_builder.add_edge("get_feedback","ingest_daily_reports")
+graph_builder.add_edge("get_feedback","save_state")
+graph_builder.add_edge("save_state",END)
 
 graph = graph_builder.compile()
 initial_state: State = {
+    "sim_date": datetime.datetime(2025,1,1),
+    "days_since_update":0,
     "today_date": None,
     "window_data": pd.DataFrame(),
     "today_data": pd.DataFrame(),
@@ -43,10 +49,19 @@ initial_state: State = {
     "done":False
 }
 
-if __name__=="__main__":
-    state = initial_state
-    while(True):
+if __name__ == "__main__":
+
+    if os.path.exists("./sim_outputs/state_snapshot.json"):
+        state = load_state()
+        print("Loaded saved simulation state.")
+    else:
+        state = initial_state
+        print("Starting new simulation.")
+
+    while True:
         state = graph.invoke(state)
-        if state["done"] == True:
+    
+        if state.get("done"):
             break
+        pass
     # print(final_state)

@@ -1,0 +1,43 @@
+import os,json
+
+import pandas as pd
+
+from .core import State
+import datetime
+
+
+def save_state(state: State):   
+    """Save current state to disk so that we dont get recursion errors"""
+    path = "./sim_outputs/state.json"
+    try:
+        os.makedirs(os.path.dirname(path),exist_ok=True)
+
+        with open(path,'w') as f:
+            json.dump({
+                "sim_date": str(state["sim_date"]),
+                "today_date": str(state["today_date"]),
+                "days_since_update": state["days_since_update"],
+                "recommendation_weights": state["recommendation_weights"],
+            },f,indent=4)
+        state["window_data"].to_csv("./sim_outputs/window_data.csv", index=False)
+        state["today_data"].to_csv("./sim_outputs/today_data.csv", index=False)
+    except Exception as e:
+        print(f"ERROR: during writing state to disk {str(e)}")
+    return state
+
+def load_state():
+    path = "./sim_outputs/state.json"
+    try:
+        with open(path,'r') as f:
+            saved = json.load(f)
+    except Exception as e:
+        print(f"ERROR: during loading state from disc {str(e)}")
+    state = {
+        "sim_date": datetime.fromisoformat(saved["sim_date"]),
+        "days_since_update": saved["days_since_update"],
+        "recommendation_weights": saved["recommendation_weights"],
+        "window_data": pd.read_csv("./sim_outputs/window_data.csv"),
+        "today_data": pd.read_csv("./sim_outputs/today_data.csv"),
+        "done": False,
+    }
+    return state

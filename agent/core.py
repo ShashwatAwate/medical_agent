@@ -30,6 +30,8 @@ except Exception as e:
 
 
 class State(TypedDict):
+    sim_date:datetime
+    days_since_update: int
     today_date: datetime
     window_data: pd.DataFrame
     today_data: pd.DataFrame

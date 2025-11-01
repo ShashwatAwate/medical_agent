@@ -1,6 +1,8 @@
 from .core import State,llm_client,MODEL_NAME
 from .utils import parse_model_res
 
+import pandas as pd
+import datetime
 
 def apply_offsets(weights,offsets,alpha=0.8):
     for key in weights.keys():
@@ -47,8 +49,6 @@ And this is the user feedback for that recommendation:
 **Your task:**
 1. Identify hospitals facing *shortages* (high forecast values) and *surpluses* (low forecast values).
 2. Suggest **specific transfers** between hospitals, in plain text. 
-   Format each transfer like:
-   - "Transfer 10 ventilators from CityCare Hospital to Metro Hospital"
 3. Justify each recommendation using the 4 preference weights.
 
 **Rules:**
@@ -56,6 +56,8 @@ And this is the user feedback for that recommendation:
 2.Give only a single recommendation.
 3.Do not include additional text, abbrevations or salutations.
 4.Do not show weights in your justification
+5.NEVER ASSUME ANYTHING, do not assume values or resource names or hopital names, use them just as they ARE.
+6.NEVER recommend transfer to the same hospital.
 ** JSON Format: **
 {{
 "recommendation":"",
@@ -63,7 +65,7 @@ And this is the user feedback for that recommendation:
  "meta":{{
     "from":,
     "to":
-    "resource_name":,
+    "resource":,
     "quantity":
     }}
 }}
@@ -103,9 +105,9 @@ You are an expert feedback analyst. Based on the user feedback, assign required 
 1. The offset must be a float value between -0.5 and 0.5.
 2. The absolute value of each offset should normally be at least 0.05 when a clear preference is detected.
 3. Use 0 only if the feedback clearly implies no change.
-4. Only respond in JSON format.
+4. Only respond in JSON format. DO NOT include any extra reasoning, justification or salutations.
 5. user_approval is either True or False based on whether user accepts or rejects recommendation.
-
+6. NEVER ASSUME ANYTHING, do not assume values or resource names or hopital names, use them just as they ARE.
 
 ** JSON format **
 {{"weights":{{
@@ -114,10 +116,12 @@ You are an expert feedback analyst. Based on the user feedback, assign required 
     "fairness":,
     "urgency":
     }},
-    "user_approval":,
+    "user_approval":
 }}
 """
+
     res = llm_client.models.generate_content(model=MODEL_NAME,contents=llm_prompt)
+    print(res.text)
     res_dict = parse_model_res(res.text)
     
     weights = state["recommendation_weights"]
@@ -127,12 +131,25 @@ You are an expert feedback analyst. Based on the user feedback, assign required 
     state['user_feedback'] = feedback
 
     if res_dict["user_approval"]==True:
+
         resource = state["recommendation_meta"]["resource"]
         from_hos = state["recommendation_meta"]["from"]
         to_hos = state["recommendation_meta"]["to"]
         qty = state["recommendation_meta"]["quantity"]
 
+        today_df = state["today_data"]
         
+        today_df.loc[today_df["hospital"]==from_hos,f"{resource}_stock"] -= qty
+        today_df.loc[today_df["hospital"]==to_hos,f"{resource}_stock"] += qty
+
+        state["window_data"] = pd.concat([state["window_data"],today_df])
+        recent_dates = sorted(state["window_data"]["date"].unique())[-14:]
+        state["window_data"] = state["window_data"][state["window_data"]["date"].isin(recent_dates)]
+
+        state["today_data"] = today_df
+        state["sim_date"] += datetime.timedelta(days=1)
+        state["days_since_update"]+=1
+
 
     return state
     

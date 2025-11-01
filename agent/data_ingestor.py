@@ -10,23 +10,25 @@ import datetime
 def ingest_knowledge(state:State):
     """Ingests structured data which has been assumed to arrive every 2 weeks"""
 
-    sim_df = sd.generate_data()
-    today_df = sim_df
+    if state["days_since_update"]>=14 or state["window_data"].empty:
+        sim_df = sd.generate_data()
+        today_df = sim_df
     
+        #updating window
+        if state["window_data"].empty:
+            state["window_data"] = today_df
+        else:
+            # window_data: will have data from last 14 entries
 
-    #updating window
-    if state["window_data"].empty:
-        state["window_data"] = today_df
-    else:
-        # window_data: will have data from last 14 entries
+            state["window_data"] = pd.concat((state["window_data"],state["today_data"]))
+            recent_dates = sorted(state["window_data"]["date"].unique())[-14:]
+            state["window_data"] = state["window_data"][state["window_data"]["date"].isin(recent_dates)]
 
-        state["window_data"] = pd.concat((state["window_data"],state["today_data"]))
-        recent_dates = sorted(state["window_data"]["date"].unique())[-14:]
-        state["window_data"] = state["window_data"][state["window_data"]["date"].isin(recent_dates)]
+        #updating todays data
+        state["today_date"] = state["sim_date"]
+        state["today_data"] = sim_df[sim_df["date"]==state["today_date"]]
+        state["days_since_update"] = 0
 
-    #updating todays data
-    state["today_date"] = datetime.datetime.today()
-    state["today_data"] = sim_df[sim_df["date"]==state["today_date"]]
     
     return state
     
@@ -80,7 +82,7 @@ Output JSON only, with no extra text.
         res_dict["confidence"] -= 0.2
 
     state["report_data"] = res_dict
-    state["today_date"] = datetime.datetime.today()
+    state["today_date"] = state["sim_date"]
     return state
 
 
