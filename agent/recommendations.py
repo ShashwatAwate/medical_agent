@@ -75,24 +75,43 @@ DO NOT give the same recommendation again.
 7.NEVER recommend transfer to the same hospital.
 8.Round quantities to INTEGERS.
 9.If there are no actionable imbalances between the tracked hospitals, clearly state that in the recommendation and justification fields.
+10.**Do NOT provide multiple transfers or a list of transfers. Only ONE transfer should be included.**
+11.**The "meta" field MUST be a single object, NOT a list or array.**
+12.The JSON must exactly match this structure (no extra keys):
 
 **JSON Format:**
 {{
-"recommendation": "",
-"justification": "",
-"meta": {{
-    "from": "",
-    "to": "",
-    "resource": "",
-    "quantity": ""
-}}
+  "recommendation": "<short plain sentence describing ONE transfer>",
+  "justification": "<reasoning in 2 to 3 sentences>",
+  "meta": {{
+      "from": "<hospital name>",
+      "to": "<hospital name>",
+      "resource": "<resource name>",
+      "quantity": <integer>
+  }}
 }}
 """
+
 
 
     res = llm_client.models.generate_content(model=MODEL_NAME,contents=llm_prompt)
     res_dict = parse_model_res(res.text)
     print(res_dict)
+    today_df = state["today_data"]
+    res_meta = res_dict["meta"]
+    resource = res_meta["resource"]
+    from_hosp = res_meta["from"]
+    to_hosp = res_meta["to"]
+    
+    from_stock_val = today_df[f"{resource}_stock"][today_df["hospital"] == from_hosp].values
+    from_usage_val = today_df[f"{resource}_usage"][today_df["hospital"] == from_hosp].values
+
+    to_stock_val = today_df[f"{resource}_stock"][today_df["hospital"] == to_hosp].values
+    to_usage_val = today_df[f"{resource}_usage"][today_df["hospital"] == to_hosp].values
+
+    print(f"from usage: {from_usage_val} | stock: {from_stock_val}")
+    print(f"to usage: {to_usage_val} | stock: {to_stock_val}")
+
     state["recommendation"] = res_dict["recommendation"]
     state["recommendation_justification"] = res_dict["justification"]
     state["recommendation_meta"] = res_dict["meta"]
@@ -103,7 +122,7 @@ def get_feedback(state: State):
     """Adjusts weights based on feedback"""
     
     feedback = input("give your feedback ")
-
+    
     feedback = feedback.lower()
     feedback_words = feedback.split()
 

@@ -47,7 +47,7 @@ initial_state: State = {
     "tracking_hosps": set(),
     "recommendation": "",
     "user_feedback":"",
-    "recommendation_weights": {"cost":0.2,"coverage":0.2,"fairness":0.2,"urgency":0.2},
+    "recommendation_weights": {"cost":0.5,"coverage":0.5,"fairness":0.5,"urgency":0.5},
     "done":False
 }
 
