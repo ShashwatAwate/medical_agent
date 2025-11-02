@@ -7,22 +7,21 @@ import os
 
 class SyntheticData:
 
-    def __init__(self,save_path: str,n_hospitals = 5, resourcs = ["oxygen","ventilators","medication_TB","ppe_kits"],start_date = datetime.today()):
+    def __init__(self,save_path: str,n_hospitals = 5, resourcs = ["oxygen","ventilators","medication_TB","ppe_kits"]):
         self.save_path = save_path
         self.simulation = pd.DataFrame()
         self.n_hospitals = n_hospitals
         self.resources = resourcs
-        self.start_date = start_date 
         self.regions = ["north","south","east","west","central"]
         self.hospitals = [f"hos_{i+1}" for i in range(self.n_hospitals)]
 
-    def generate_data(self,seed = 42) :
+    def generate_data(self,seed = 42,start_date = datetime.today()) :
         """Generates a simulation of n_weeks with random usage spikes and uses given resources"""
 
         np.random.seed(seed)
         random.seed(seed)
 
-        start = self.start_date - timedelta(days=14)
+        start = start_date - timedelta(days=13)
         
         data = []
 

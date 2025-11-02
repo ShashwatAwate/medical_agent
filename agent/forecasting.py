@@ -4,11 +4,11 @@ from .core import State,sd
 def forecast_data(state: State):
     """Forecast resource use and potential shortages using a rolling average"""
 
-    window_df = state["window_data"]
+    window_df = state["tracking_data"]
     forecasts = {}
     severity_score = {"mild":1.05,"moderate":1.2,"severe":1.4,"critical":1.6}
     current_severity = state["report_data"]["severity"]
-    for hospital in sd.hospitals:
+    for hospital in state["tracking_hosps"]:
         hospital_df = window_df[window_df["hospital"]==hospital].sort_values("date")
         hospital_forecasts = {}
         for resource in sd.resources:
@@ -18,6 +18,7 @@ def forecast_data(state: State):
             hospital_forecasts[f"{resource}_forecast"] = res_forecast
         forecasts[hospital] = hospital_forecasts
 
+    print(forecasts)
     state["today_forecasts"] = forecasts
     return state
 
@@ -28,7 +29,7 @@ def draw_conclusions(state: State):
     for hosp,preds in state["today_forecasts"].items():
         for res in sd.resources:
             #get latest stock for that resource
-            stock = state["window_data"].query("hospital==@hosp")[f"{res}_stock"].iloc[-1]
+            stock = state["tracking_data"].query("hospital==@hosp")[f"{res}_stock"].iloc[-1]
             forecast = preds[f"{res}_forecast"]
             diff = stock - forecast
 
@@ -39,7 +40,8 @@ def draw_conclusions(state: State):
             else:
                 conclusion = f"{hosp} might be stable for {res}"
             conclusions.append(conclusion)
-        
+    
+    # print(conclusions)
     state["forecast_conclusions"] = conclusions
     return state
 

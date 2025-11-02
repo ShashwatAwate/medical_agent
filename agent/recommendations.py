@@ -31,12 +31,14 @@ def build_recommendations(state: State):
     recommendation = state["recommendation"]
     feedback = state["user_feedback"]
 
+    tracked_hospitals = list(state["tracking_hosps"])  
+
     llm_prompt = f"""
 You are a healthcare resource allocation assistant tasked with optimizing resource distribution across hospitals.
 
 Your job: decide how to reallocate resources between hospitals based on forecasted shortages or surpluses.
 
-Current preference weights, if weight is higher, prefer those choices:
+Current preference weights (higher = more preferred):
 - Cost Efficiency: {w_cost}
 - Coverage: {w_coverage}
 - Fairness: {w_fairness}
@@ -44,39 +46,47 @@ Current preference weights, if weight is higher, prefer those choices:
 
 Here are the forecasted resource utilizations:
 {forecast_summary}
+
+Hospitals currently being tracked:
+{tracked_hospitals}
+
 This is the previous given recommendation:
 {recommendation}
+
 And this is the user feedback for that recommendation:
 {feedback}
+
 DO NOT give the same recommendation again.
+
 ---
 
 **Your task:**
-1. Identify hospitals facing *shortages* (high forecast values) and *surpluses* (low forecast values).
-2. Suggest **specific transfers** between hospitals, in plain text. 
+1. Identify hospitals facing *shortages* (high forecast values) and *surpluses* (low forecast values) **only among the tracked hospitals**.
+2. Suggest **specific transfers** between tracked hospitals in plain text. 
 3. Justify each recommendation using the 4 preference weights.
 
 **Rules:**
-1.Only give response in valid JSON format
+1.Only give response in valid JSON format.
 2.Give only a single recommendation.
-3.Do not include additional text, abbrevations or salutations.
-4.Do not show weights in your justification
-5.NEVER ASSUME ANYTHING, do not assume values or resource names or hopital names, use them just as they ARE.
-6.NEVER recommend transfer to the same hospital.
-7.Round quantities to INTEGERS.
-** JSON Format: **
+3.Do not include additional text, abbreviations or salutations.
+4.Do not show weights in your justification.
+5.**You must only reference hospitals from this list: {tracked_hospitals}.**
+6.**Never mention or invent hospitals that are not in the list.**
+7.NEVER recommend transfer to the same hospital.
+8.Round quantities to INTEGERS.
+9.If there are no actionable imbalances between the tracked hospitals, clearly state that in the recommendation and justification fields.
+
+**JSON Format:**
 {{
-"recommendation":"",
-"justification":"",
- "meta":{{
-    "from":,
-    "to":
-    "resource":,
-    "quantity":
-    }}
+"recommendation": "",
+"justification": "",
+"meta": {{
+    "from": "",
+    "to": "",
+    "resource": "",
+    "quantity": ""
 }}
-If there are no actionable imbalances, say so clearly.
-Output should be a concise, readable report.
+}}
 """
 
 
@@ -150,15 +160,16 @@ def get_feedback(state: State):
         today_df.loc[today_df["hospital"]==from_hos,f"{resource}_stock"] -= qty
         today_df.loc[today_df["hospital"]==to_hos,f"{resource}_stock"] += qty
 
-        state["window_data"] = pd.concat([state["window_data"],today_df])
-        recent_dates = sorted(state["window_data"]["date"].unique())[-14:]
-        state["window_data"] = state["window_data"][state["window_data"]["date"].isin(recent_dates)]
+        state["tracking_data"] = pd.concat([state["tracking_data"],today_df])
+        recent_dates = sorted(state["tracking_data"]["date"].unique())[-14:]
+        state["tracking_data"] = state["tracking_data"][state["tracking_data"]["date"].isin(recent_dates)]
 
         state["today_data"] = today_df
 
     state["sim_date"] += datetime.timedelta(days=1)
     state["days_since_update"]+=1
 
+    print(state["tracking_data"]["hospital"].unique())
 
     return state
     

@@ -10,28 +10,42 @@ import datetime
 def ingest_knowledge(state:State):
     """Ingests structured data which has been assumed to arrive every 2 weeks"""
 
-    if state["days_since_update"]>=3 or state["window_data"].empty:
+    if state["window_data"].empty:
+            sim_df = sd.generate_data(start_date=state["sim_date"])
+            today_df = sim_df
+
+            state["today_date"] = state["sim_date"]
+            state["window_data"] = today_df
+            state["tracking_data"] = today_df
+            state["tracking_hosps"] = set(today_df["hospital"].unique())
+            state["today_data"] = sim_df[sim_df["date"]==state["sim_date"]]
+
+    elif state["days_since_update"]>=3:
 
         print("INFO: Recieved new data!")
         
-        sim_df = sd.generate_data()
+        sim_df = sd.generate_data(start_date=state["sim_date"])
         today_df = sim_df
     
-        #updating window
-        if state["window_data"].empty:
-            state["window_data"] = today_df
-        else:
-            # window_data: will have data from last 14 entries
+        # window_data: will have data from last 14 entries
+        state["window_data"] = pd.concat((state["window_data"],state["today_data"]))
+        recent_dates = sorted(state["window_data"]["date"].unique())[-14:]
+        state["window_data"] = state["window_data"][state["window_data"]["date"].isin(recent_dates)]
 
-            state["window_data"] = pd.concat((state["window_data"],state["today_data"]))
-            recent_dates = sorted(state["window_data"]["date"].unique())[-14:]
-            state["window_data"] = state["window_data"][state["window_data"]["date"].isin(recent_dates)]
+        state["tracking_data"] = state["window_data"][state["window_data"]["hospital"].isin(state["tracking_hosps"])]
 
         #updating todays data
-        state["today_date"] = state["sim_date"]
-        state["today_data"] = sim_df[sim_df["date"]==state["today_date"]]
+        state["today_data"] = sim_df[sim_df["date"]==state["sim_date"]]
         state["days_since_update"] = 0
 
+    if state["today_data"].empty:
+        print("WARNING: today_data is empty! state['today_date']:", state["sim_date"])
+        print("Available dates in sim_df:", sim_df["date"].unique())
+    else:
+        print("INFO: today_data shape:", state["today_data"].shape)
+
+    # print(state["window_data"].head())
+    # print(state["tracking_data"].head())
     
     return state
     
@@ -86,6 +100,7 @@ Output JSON only, with no extra text.
 
     state["report_data"] = res_dict
     state["today_date"] = state["sim_date"]
+    
     return state
 
 

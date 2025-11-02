@@ -7,6 +7,7 @@ from .data_ingestor import ingest_knowledge,ingest_daily_reports
 from .forecasting import forecast_data,draw_conclusions
 from .recommendations import build_recommendations,get_feedback
 from .persistence import save_state,load_state
+from .tracking import setup_tracking
 
 import datetime
 import os
@@ -37,12 +38,13 @@ graph = graph_builder.compile()
 initial_state: State = {
     "sim_date": datetime.datetime(2025,1,1),
     "days_since_update":0,
-    "today_date": None,
     "window_data": pd.DataFrame(),
     "today_data": pd.DataFrame(),
+    "tracking_data":pd.DataFrame(),
     "report_data": {},
     "today_forecasts": {},
     "forecast_conclusions": [],
+    "tracking_hosps": set(),
     "recommendation": "",
     "user_feedback":"",
     "recommendation_weights": {"cost":0.2,"coverage":0.2,"fairness":0.2,"urgency":0.2},
@@ -59,9 +61,13 @@ if __name__ == "__main__":
         print("Starting new simulation.")
 
     while True:
-        state = graph.invoke(state)
-    
-        if state.get("done"):
-            break
+        choice = int(input("1. Recommend 2. Tracking"))
+        if choice==1:
+            state = graph.invoke(state)
+
+            if state.get("done"):
+                break
+        elif choice==2:
+            state = setup_tracking(state)
         pass
     # print(final_state)
