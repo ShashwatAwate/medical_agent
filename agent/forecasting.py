@@ -1,48 +1,55 @@
-from .core import State,sd
+from agent.core import State,sd
 
 
 def forecast_data(state: State):
     """Forecast resource use and potential shortages using a rolling average"""
+    try:
+        window_df = state["tracking_data"]
+        forecasts = {}
+        severity_score = {"mild":1.05,"moderate":1.2,"severe":1.4,"critical":1.6}
+        current_severity = state["report_data"]["severity"]
+        for hospital in state["tracking_hosps"]:
+            hospital_df = window_df[window_df["hospital"]==hospital].sort_values("date")
+            hospital_forecasts = {}
+            for resource in sd.resources:
 
-    window_df = state["tracking_data"]
-    forecasts = {}
-    severity_score = {"mild":1.05,"moderate":1.2,"severe":1.4,"critical":1.6}
-    current_severity = state["report_data"]["severity"]
-    for hospital in state["tracking_hosps"]:
-        hospital_df = window_df[window_df["hospital"]==hospital].sort_values("date")
-        hospital_forecasts = {}
-        for resource in sd.resources:
-            
-            rolling_avg = hospital_df[f"{resource}_usage"].rolling(window=7).mean()
-            res_forecast = rolling_avg.iloc[-1]*severity_score[current_severity]
-            hospital_forecasts[f"{resource}_forecast"] = res_forecast
-        forecasts[hospital] = hospital_forecasts
+                trend = hospital_df[f"{resource}_usage"].diff().rolling(window=7).mean().iloc[-1]
+                base = hospital_df[f"{resource}_usage"].iloc[-1]
+                res_forecast = base + trend * severity_score[current_severity]
+                hospital_forecasts[f"{resource}_forecast"] = res_forecast
+            forecasts[hospital] = hospital_forecasts
 
-    print(forecasts)
-    state["today_forecasts"] = forecasts
+        print(forecasts)
+        state["today_forecasts"] = forecasts
+    except Exception as e:
+        print(f"ERROR: during forecasting data {str(e)}")
+        print(f"{type(e).__name__}")
     return state
 
 def draw_conclusions(state: State):
     """Draw conclusions based on the forecasts"""
-    
-    conclusions = []
-    for hosp,preds in state["today_forecasts"].items():
-        for res in sd.resources:
-            #get latest stock for that resource
-            stock = state["tracking_data"].query("hospital==@hosp")[f"{res}_stock"].iloc[-1]
-            forecast = preds[f"{res}_forecast"]
-            diff = stock - forecast
+    try:
+        conclusions = []
+        for hosp,preds in state["today_forecasts"].items():
+            for res in sd.resources:
+                #get latest stock for that resource
+                stock = state["tracking_data"].query("hospital==@hosp")[f"{res}_stock"].iloc[-1]
+                forecast = preds[f"{res}_forecast"]
+                diff = stock - forecast
 
-            if diff<0:
-                conclusion = f"{hosp} might face a SHORTAGE for {res} by {diff} units"
-            elif diff>100:
-                conclusion = f"{hosp} might have a SURPLUS for {res} by {diff} units"
-            else:
-                conclusion = f"{hosp} might be stable for {res}"
-            conclusions.append(conclusion)
-    
-    # print(conclusions)
-    state["forecast_conclusions"] = conclusions
+                if diff<0:
+                    conclusion = f"{hosp} might face a SHORTAGE for {res} by {diff} units"
+                elif diff>100:
+                    conclusion = f"{hosp} might have a SURPLUS for {res} by {diff} units"
+                else:
+                    conclusion = f"{hosp} might be stable for {res}"
+                conclusions.append(conclusion)
+
+        # print(conclusions)
+        state["forecast_conclusions"] = conclusions
+    except Exception as e:
+        print(f"ERROR: during drawing conclusions from forecasts {str(e)}")
+        print(f"{type(e).__name__}")
     return state
 
 

@@ -1,0 +1,17 @@
+[project]
+name = "medial-agent"
+version = "0.1.0"
+description = "My Streamlit app"
+authors = [{name = "Shashwat"}]
+dependencies = [
+    "streamlit",
+    "numpy",
+    "pandas"
+]
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["agent", "sim_data", "sim_outputs"]

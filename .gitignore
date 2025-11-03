@@ -2,3 +2,4 @@
 __pycache__
 .env
 sim_outputs
+medial_agent.egg-info

@@ -2,7 +2,7 @@ import os,json
 
 import pandas as pd
 
-from .core import State
+from agent.core import State
 import datetime
 
 
@@ -15,6 +15,7 @@ def save_state(state: State):
         with open(path,'w') as f:
             json.dump({
                 "sim_date": str(state["sim_date"]),
+                "recommendation":state["recommendation"],
                 "days_since_update": state["days_since_update"],
                 "recommendation_weights": state["recommendation_weights"],
                 "tracking_hosps": list(state["tracking_hosps"])
@@ -32,7 +33,7 @@ def load_state():
         with open(path,'r') as f:
             saved = json.load(f)
         state = {
-        "sim_date": datetime.fromisoformat(saved["sim_date"]),
+        "sim_date": datetime.datetime.fromisoformat(saved["sim_date"]),
         "days_since_update": saved["days_since_update"],
         "recommendation_weights": saved["recommendation_weights"],
         "tracking_hosps": set(saved["tracking_hosps"]),

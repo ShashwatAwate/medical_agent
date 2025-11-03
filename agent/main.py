@@ -1,16 +1,18 @@
 from langgraph.graph import StateGraph,START,END
 import pandas as pd
 
-from .core import State,sd
+from agent.core import State,sd
 
-from .data_ingestor import ingest_knowledge,ingest_daily_reports
-from .forecasting import forecast_data,draw_conclusions
-from .recommendations import build_recommendations,get_feedback
-from .persistence import save_state,load_state
-from .tracking import setup_tracking
+from agent.data_ingestor import ingest_knowledge,ingest_daily_reports
+from agent.forecasting import forecast_data,draw_conclusions
+from agent.recommendations import build_recommendations,get_feedback
+from agent.persistence import save_state,load_state
+from agent.tracking import setup_tracking
 
 import datetime
 import os
+
+import streamlit as st
 
 graph_builder = StateGraph(State)
 
@@ -30,8 +32,7 @@ graph_builder.add_edge("ingest_knowledge","ingest_daily_reports")
 graph_builder.add_edge("ingest_daily_reports","forecast_data")
 graph_builder.add_edge("forecast_data","draw_conclusions")
 graph_builder.add_edge("draw_conclusions","build_recommendations")
-graph_builder.add_edge("build_recommendations","get_feedback")
-graph_builder.add_edge("get_feedback","save_state")
+graph_builder.add_edge("build_recommendations","save_state")
 graph_builder.add_edge("save_state",END)
 
 graph = graph_builder.compile()
@@ -46,6 +47,8 @@ initial_state: State = {
     "forecast_conclusions": [],
     "tracking_hosps": set(),
     "recommendation": "",
+    "recommendation_justification":"",
+    "recommendation_meta":{},
     "user_feedback":"",
     "recommendation_weights": {"cost":0.5,"coverage":0.5,"fairness":0.5,"urgency":0.5},
     "done":False
@@ -53,21 +56,79 @@ initial_state: State = {
 
 if __name__ == "__main__":
 
-    if os.path.exists("./sim_outputs/state_snapshot.json"):
-        state = load_state()
-        print("Loaded saved simulation state.")
-    else:
-        state = initial_state
-        print("Starting new simulation.")
+    try:
+        action = st.sidebar.selectbox("Choose Action",["Home","Tracking","Recommend"])
 
-    while True:
-        choice = int(input("1. Recommend 2. Tracking"))
-        if choice==1:
-            state = graph.invoke(state)
+        if action=="Home":
+            st.header("Welcome to the hospital agent dashboard")
 
-            if state.get("done"):
-                break
-        elif choice==2:
-            state = setup_tracking(state)
-        pass
+            st.write("Simulation")
+            if os.path.exists("./sim_outputs/state.json"):
+                sim_mode = st.radio(
+                    "Select simulation mode:",
+                    ["Start New Simulation", "Continue Previous Simulation"],
+                    horizontal=True
+                )
+            else:
+                sim_mode = "Start New Simulation"
+            if st.button("Confirm Choice"):
+                if sim_mode == "Start New Simulation":
+                    state = initial_state
+                    st.session_state["state"] = state
+                    st.success("New simulation started")
+                else:
+                    state = load_state()
+                    st.session_state["state"] = state
+                    st.info("Continuing previous simulation")
+
+                st.subheader(f"Current simulation date: {st.session_state['state']['sim_date'].strftime('%Y-%m-%d')}")
+
+        elif action=="Tracking":
+            if("state" not in st.session_state):
+                st.error("Initialize a simulation first!")
+            if(st.session_state["state"]["window_data"].empty or st.session_state["state"]["tracking_data"].empty):
+                st.error("Cannot Update Tracking! Run a recommendation first")
+            else:
+                all_hospitals = list(st.session_state["state"]["window_data"]["hospital"].unique())
+                selected_hospitals = st.multiselect(
+                    "Select hosps to track",
+                    options = all_hospitals,
+                    default= list(st.session_state["state"]["tracking_hosps"])
+                )
+                if st.button("Update Tracking"):
+                    st.session_state["state"] = setup_tracking(st.session_state["state"],selected_hospitals)
+                    st.success("Tracking Updated")
+        elif action=="Recommend":
+            if("state" not in st.session_state):
+                st.error("Initialize a simulation first!")
+            else:
+                st.session_state["state"] = graph.invoke(st.session_state["state"])
+                st.subheader("Recommendation")
+                st.write(st.session_state["state"]["recommendation"])
+                st.subheader("Justification")
+
+                st.write(st.session_state["state"]["recommendation_justification"])
+                from_hosp = st.session_state["state"]["recommendation_meta"]["from"]
+                to_hosp = st.session_state["state"]["recommendation_meta"]["to"]
+                resource = st.session_state["state"]["recommendation_meta"]["resource"]
+
+                today_df = st.session_state["state"]["tracking_data"]
+                from_stock_val = int(today_df[f"{resource}_stock"][today_df["hospital"] == from_hosp].iloc[0])
+                from_usage_val = int(today_df[f"{resource}_usage"][today_df["hospital"] == from_hosp].iloc[0])
+
+                to_stock_val = int(today_df[f"{resource}_stock"][today_df["hospital"] == to_hosp].iloc[0])
+                to_usage_val = int(today_df[f"{resource}_usage"][today_df["hospital"] == to_hosp].iloc[0])
+
+                st.metric("From Stock",from_stock_val)
+                st.metric("To stock",to_stock_val)
+
+                feedback = st.text_area("Give feedback")
+                if st.button("Submit Feedback"):
+                    st.session_state["state"] = get_feedback(st.session_state["state"],feedback)
+                    save_state(st.session_state["state"])
+                    st.write("Updated Recommendation Weights:", st.session_state["state"]["recommendation_weights"])
+    except Exception as e:
+        print(f"ERROR: in main function {str(e)}")
+        print(f"{type(e).__name__}")
+
     # print(final_state)

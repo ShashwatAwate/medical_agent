@@ -1,4 +1,4 @@
-from .core import State
+from agent.core import State
 
 import json
 import re
@@ -40,6 +40,7 @@ def append_to_index(state: State,text):
             state["prev_recommendations"][emb] = text
     except Exception as e:
         print(f"ERROR: during appending to faiss index {str(e)}")
+        print(f"{type(e).__name__}")
     return state 
 
 
