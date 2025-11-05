@@ -45,6 +45,7 @@ initial_state: State = {
     "distances":pd.DataFrame(),
     "shortages":list,
     "surpluses":list,
+    "resource_names":[],
     "report_data": {},
     "today_forecasts": {},
     "forecast_conclusions": [],
@@ -101,8 +102,8 @@ if __name__ == "__main__":
                 if st.button("Update Tracking"):
                     st.session_state["state"] = setup_tracking(st.session_state["state"],selected_hospitals)
                     st.success("Tracking Updated")
-        elif action=="Recommend":
-            if("state" not in st.session_state):
+        elif action == "Recommend":
+            if "state" not in st.session_state:
                 st.error("Initialize a simulation first!")
             else:
                 if st.button("Get Recommendation"):
@@ -122,14 +123,13 @@ if __name__ == "__main__":
                 else:
                     from_hosp = res_meta.get("from", [])
                     to_hosp = res_meta.get("to", [])
-                    resource = res_meta.get("resource", "").lower()
+                    resource = res_meta.get("resource", "")
                     rec_qty = res_meta.get("quantity")
 
                     today_df = state.get("tracking_data", None)
                     if today_df is None or resource is None:
                         st.warning("Tracking data or resource not available.")
                     else:
-                        # Convert to list if single hospital
                         if isinstance(from_hosp, str):
                             from_hosp = [from_hosp]
                         if isinstance(to_hosp, str):
@@ -138,70 +138,89 @@ if __name__ == "__main__":
                         st.markdown("### Resource Transfer Details")
                         st.write(f"**Resource:** {resource}")
 
-                        from_data = []
+                        from_data, to_data = [], []
                         for fh in from_hosp:
-                            from_row = today_df[today_df["hospital"] == fh]
-                            if not from_row.empty:
+                            row = today_df[today_df["hospital"] == fh]
+                            if not row.empty:
                                 from_data.append({
                                     "Hospital": fh,
-                                    "Stock": int(from_row[f"{resource}_stock"].iloc[0]),
-                                    "Usage": int(from_row[f"{resource}_usage"].iloc[0])
+                                    "Stock": int(row[f"{resource}_stock"].iloc[0]),
+                                    "Usage": int(row[f"{resource}_usage"].iloc[0])
                                 })
 
-                        # Prepare "To Hospitals" data
-                        to_data = []
                         for th in to_hosp:
-                            to_row = today_df[today_df["hospital"] == th]
-                            if not to_row.empty:
+                            row = today_df[today_df["hospital"] == th]
+                            if not row.empty:
                                 to_data.append({
                                     "Hospital": th,
-                                    "Stock": int(to_row[f"{resource}_stock"].iloc[0]),
-                                    "Usage": int(to_row[f"{resource}_usage"].iloc[0])
+                                    "Stock": int(row[f"{resource}_stock"].iloc[0]),
+                                    "Usage": int(row[f"{resource}_usage"].iloc[0])
                                 })
-                col1, col2 = st.columns(2)
 
-                with col1:
-                    st.subheader("From Hospitals")
-                    if from_data:
-                        st.dataframe(pd.DataFrame(from_data), width="stretch")
-                    else:
-                        st.info("No data for from hospitals")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.subheader("From Hospitals")
+                            st.dataframe(pd.DataFrame(from_data), width="stretch")
+                        with col2:
+                            st.subheader("To Hospitals")
+                            st.dataframe(pd.DataFrame(to_data), width="stretch")
 
-                with col2:
-                    st.subheader("To Hospitals")
-                    if to_data:
-                        st.dataframe(pd.DataFrame(to_data), width="stretch")
-                    else:
-                        st.info("No data for to hospitals")
+                        st.write(f"**Quantity to transfer:** {rec_qty}")
 
-                st.write(f"**Quantity to transfer** {rec_qty}")
-                col1,col2 = st.columns(2)
-                with col1:
-                    accept_click = st.button("Accept")
-                with col2:
-                    reject_click = st.button("Reject")
-                transfer_quantities = {}
-                reason = ""
-                approval = False
-                if accept_click:
-                    approval = True
-                    st.subheader("Adjust Quantities")
-                    transfer_quantities = {}
-                    for fh in from_hosp:
-                        for th in to_hosp:
-                            default = res_meta.get("quantity",0)
-                            val_str = st.text_input("Enter quantity", value=str(default))
-                            qty = int(val_str)
-                            transfer_quantities[(fh,th)] = qty
-                elif reject_click:
-                    reason = st.text_area("Specify reason for rejection")
+                        # Maintain UI state properly across reruns
+                        if "feedback_mode" not in st.session_state:
+                            st.session_state["feedback_mode"] = None
+
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("Accept"):
+                                st.session_state["feedback_mode"] = "accept"
+                        with col2:
+                            if st.button("Reject"):
+                                st.session_state["feedback_mode"] = "reject"
+
+                        if st.session_state["feedback_mode"] == "accept":
+                            st.subheader("Adjust Quantities")
+                            transfer_quantities = {}
+                            for fh in from_hosp:
+                                for th in to_hosp:
+                                    default = res_meta.get("quantity", 0)
+                                    qty_str = st.text_input(f"{fh} → {th}", value=str(default), key=f"{fh}_{th}")
+                                    try:
+                                        hosp_df = today_df[today_df["hospital"]==fh]
+                                        qty = int(qty_str)
+                                        if qty<0 or qty>hosp_df[f"{resource}_stock"].iloc[0]:
+                                            st.info("Invalid quantity entered! Defaulting to recommended value")
+                                            qty = default
+                                    except ValueError:
+                                        print("ERROR: Encountered value error")
+                                        qty = 0
+                                    transfer_quantities[(fh, th)] = qty
+
+                            if st.button("Submit Feedback"):
+                                st.session_state["state"] = get_feedback(
+                                    st.session_state["state"],
+                                    approval=True,
+                                    transfer_vals=transfer_quantities,
+                                    reason=""
+                                )
+                                save_state(st.session_state["state"])
+                                st.success("Feedback submitted successfully!")
+                                st.session_state["feedback_mode"] = None
+
+                        elif st.session_state["feedback_mode"] == "reject":
+                            reason = st.text_area("Specify reason for rejection")
+                            if st.button("Submit Rejection"):
+                                st.session_state["state"] = get_feedback(
+                                    st.session_state["state"],
+                                    approval=False,
+                                    transfer_vals={},
+                                    reason=reason
+                                )
+                                save_state(st.session_state["state"])
+                                st.info("Rejection submitted.")
+                                st.session_state["feedback_mode"] = None
                 
-                if accept_click or reject_click:
-                    if st.button("Submit Feedback"):
-                        st.session_state["state"] = get_feedback(st.session_state["state"],approval=approval,transfer_vals=transfer_quantities,reason=reason)
-                        save_state(st.session_state["state"])
-                        st.write("Updated Recommendation Weights:", st.session_state["state"]["recommendation_weights"])
-
     except Exception as e:
         print(f"ERROR: in main function {str(e)}")
         print(f"{type(e).__name__}")

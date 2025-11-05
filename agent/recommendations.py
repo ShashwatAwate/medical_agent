@@ -2,6 +2,7 @@ from agent.core import State,llm_client,MODEL_NAME
 from agent.utils import parse_model_res,index,model
 from agent.forecasting import prepare_candidates
 
+
 from sklearn.metrics.pairwise import cosine_similarity
 
 import pandas as pd
@@ -30,18 +31,26 @@ def rank_candidates(state: State):
         w_coverage = state["recommendation_weights"]["coverage"]
         w_fairness = state["recommendation_weights"]["fairness"]
         w_urgency = state["recommendation_weights"]["urgency"]
+        
         for candidate in candidates:
             short_hosp = candidate["short_hospital"]
             providers = candidate["providers"]
             shortage = candidate["shortage"]
-            available_surplus += [provider["quantity"] for provider in providers]
+            available_surplus = 0
+            for provider in providers:
+                available_surplus += provider["quantity"] 
             coverage_score = w_coverage*(min(shortage,available_surplus)/shortage)
             fairness_score = w_fairness*(1 - abs(available_surplus - shortage)/(available_surplus+shortage))
-            urgency_score = w_urgency*(state["report_data"]["severity"])
+            severity_score = {"mild":1.05,"moderate":1.2,"severe":1.4,"critical":1.6}
+            urgency_score = w_urgency*(severity_score[state["report_data"]["severity"]])
             distances = [state["distances"].loc[short_hosp,p["hospital"]] for p in providers]
             avg_dist = np.mean(distances)
-            max_dist = distances.max()
-            distance_score = w_cost*(1-(avg_dist/max_dist))
+
+            distances = [state["distances"].loc[short_hosp, p["hospital"]] for p in providers]
+            avg_dist = np.mean(distances)
+            max_dist = max(distances) if distances else 1
+            distance_score = w_cost * (1 - (avg_dist / max_dist))
+
 
             score = distance_score + coverage_score + fairness_score + urgency_score
             candidate["score"] = score
@@ -115,7 +124,7 @@ def llm_recommendation(state:State):
         recommendation = state.get("recommendation","")
         feedback = state.get("user_feedback","")
         tracked_hospitals = list(state["tracking_hosps"])  
-
+        resource_names = state.get("resource_names",[])
 
         llm_prompt = f"""
     You are a healthcare resource allocation assistant tasked with optimizing resource distribution across hospitals.
@@ -131,9 +140,6 @@ def llm_recommendation(state:State):
     Here are selected candidate utilizations:
     {ranked_summary}
 
-    Hospitals currently being tracked:
-    {tracked_hospitals}
-
     This is the previous given recommendation:
     {recommendation}
 
@@ -141,6 +147,9 @@ def llm_recommendation(state:State):
     {feedback}
 
     DO NOT give the same recommendation again.
+
+    **Important:** You must choose the resource name exactly as provided in this list: {resource_names}.
+    Do not invent or modify any resource names. The casing must match exactly.
 
     ---
 
@@ -208,7 +217,7 @@ def build_recommendations(state: State):
         # Ensure these are lists (even if only one hospital)
         from_hosp = res_meta.get("from", [])
         to_hosp = res_meta.get("to", [])
-        resource = res_meta.get("resource", "").lower()
+        resource = res_meta.get("resource", "")
 
         if isinstance(from_hosp, str):
             from_hosp = [from_hosp]
@@ -252,15 +261,16 @@ def get_feedback(state: State,approval:bool,transfer_vals:dict = {},reason:str =
                 state["recommendation_weights"][weight] += 0.02
             meta = state.get("recommendation_meta")
             if isinstance(meta,dict) and meta.get("resource"):
-                resource = meta["resource"]
+                resource = meta.get("resource","")
                 from_hos = meta.get("from", [])
                 to_hos = meta.get("to", [])
-                qty = transfer_vals.get((from_hos,to_hos),0)
-                print(f"INFO: for {resource} qty is {qty}")
-                today_df = state["today_data"]
+                for fh in from_hos:
+                    qty = transfer_vals.get((fh,to_hos),meta.get("quantity",0))
+                    print(f"INFO: for {resource} qty is {qty}")
+                    today_df = state["today_data"]
 
-                today_df.loc[today_df["hospital"]==(hos for hos in from_hos),f"{resource}_stock"] -= qty
-                today_df.loc[today_df["hospital"]==to_hos,f"{resource}_stock"] += qty
+                    today_df.loc[today_df["hospital"]== fh,f"{resource}_stock"] -= qty
+                    today_df.loc[today_df["hospital"]==to_hos,f"{resource}_stock"] += qty
 
                 state["tracking_data"] = pd.concat([state["tracking_data"],today_df])
                 recent_dates = sorted(state["tracking_data"]["date"].unique())[-14:]

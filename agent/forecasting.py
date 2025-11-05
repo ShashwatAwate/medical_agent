@@ -79,9 +79,12 @@ def prepare_candidates(state: State):
         # print(distance_df.head())
         for short_entry in state["shortages"]:
             providers = []
-            short_hosp,short_resource,short_diff = short_entry.items()
+            short_hosp = short_entry["hospital"]
+            short_resource = short_entry["resource"]
+            short_diff = short_entry["quantity"]
+
             surplus_candidates = [entry for entry in state["surpluses"] if entry["resource"]==short_resource]
-            surplus_candidates = surplus_candidates.sort(key= lambda x: distance_df.loc[short_hosp,x["hospital"]])
+            surplus_candidates = sorted(surplus_candidates, key=lambda x: distance_df.loc[short_hosp, x["hospital"]])
             remaining_need = short_diff
             for candidate in surplus_candidates:
                 disposable_surplus = 0.6*candidate["quantity"]

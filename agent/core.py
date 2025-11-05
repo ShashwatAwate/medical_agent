@@ -38,6 +38,7 @@ class State(TypedDict):
     distances: pd.DataFrame
     shortages: list
     surpluses: list
+    resource_names: list
     tracking_hosps: set
     report_data: dict
     today_forecasts : dict

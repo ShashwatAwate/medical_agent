@@ -21,7 +21,8 @@ def ingest_knowledge(state:State):
                 state["tracking_hosps"] = set(today_df["hospital"].unique())
                 state["today_data"] = sim_df[sim_df["date"]==state["sim_date"]]
                 state["distances"] = dist_df
-
+                state["resource_names"] = sd.resources
+                
         elif state["days_since_update"]>=3:
 
             print("INFO: Recieved new data!")
