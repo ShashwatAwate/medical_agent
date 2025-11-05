@@ -53,6 +53,11 @@ class SyntheticData:
 
         df = pd.DataFrame(data)
         self.simulation = df
+
+        distances = np.random.randint(5,500,size=(self.n_hospitals,self.n_hospitals))
+        for i in range(self.n_hospitals):
+            distances[i][i] = 0
+        distance_df = pd.DataFrame(data=distances,index=self.hospitals,columns=self.hospitals)
         
         try:
             sim_path =  os.path.join(self.save_path,"simulation.csv")
@@ -61,7 +66,7 @@ class SyntheticData:
             print(f"ERROR:{str(e)} during writing dataframes to disk ")
             return
         
-        return df
+        return df,distance_df
 
 
     def generate_reports(self):

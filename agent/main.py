@@ -42,6 +42,9 @@ initial_state: State = {
     "window_data": pd.DataFrame(),
     "today_data": pd.DataFrame(),
     "tracking_data":pd.DataFrame(),
+    "distances":pd.DataFrame(),
+    "shortages":list,
+    "surpluses":list,
     "report_data": {},
     "today_forecasts": {},
     "forecast_conclusions": [],
@@ -102,25 +105,55 @@ if __name__ == "__main__":
             if("state" not in st.session_state):
                 st.error("Initialize a simulation first!")
             else:
+
                 st.session_state["state"] = graph.invoke(st.session_state["state"])
+                state = st.session_state["state"]
+
                 st.subheader("Recommendation")
-                st.write(st.session_state["state"]["recommendation"])
+                st.write(state.get("recommendation", "No recommendation available."))
+
                 st.subheader("Justification")
+                st.write(state.get("recommendation_justification", "No justification available."))
 
-                st.write(st.session_state["state"]["recommendation_justification"])
-                from_hosp = st.session_state["state"]["recommendation_meta"]["from"]
-                to_hosp = st.session_state["state"]["recommendation_meta"]["to"]
-                resource = st.session_state["state"]["recommendation_meta"]["resource"]
+                res_meta = state.get("recommendation_meta", {})
+                if not res_meta:
+                    st.write("Nothing to change!")
+                else:
+                    from_hosp = res_meta.get("from", [])
+                    to_hosp = res_meta.get("to", [])
+                    resource = res_meta.get("resource", None)
 
-                today_df = st.session_state["state"]["tracking_data"]
-                from_stock_val = int(today_df[f"{resource}_stock"][today_df["hospital"] == from_hosp].iloc[0])
-                from_usage_val = int(today_df[f"{resource}_usage"][today_df["hospital"] == from_hosp].iloc[0])
+                    today_df = state.get("tracking_data", None)
+                    if today_df is None or resource is None:
+                        st.warning("Tracking data or resource not available.")
+                    else:
+                        # Convert to list if single hospital
+                        if isinstance(from_hosp, str):
+                            from_hosp = [from_hosp]
+                        if isinstance(to_hosp, str):
+                            to_hosp = [to_hosp]
 
-                to_stock_val = int(today_df[f"{resource}_stock"][today_df["hospital"] == to_hosp].iloc[0])
-                to_usage_val = int(today_df[f"{resource}_usage"][today_df["hospital"] == to_hosp].iloc[0])
+                        st.markdown("### Resource Transfer Details")
+                        st.write(f"**Resource:** {resource}")
 
-                st.metric("From Stock",from_stock_val)
-                st.metric("To stock",to_stock_val)
+                        # Display metrics for each 'from' hospital
+                        for fh in from_hosp:
+                            from_row = today_df[today_df["hospital"] == fh]
+                            if not from_row.empty:
+                                from_stock_val = int(from_row[f"{resource}_stock"].iloc[0])
+                                from_usage_val = int(from_row[f"{resource}_usage"].iloc[0])
+                                st.metric(f"From {fh} - Stock", from_stock_val)
+                                st.metric(f"From {fh} - Usage", from_usage_val)
+
+                        # Display metrics for each 'to' hospital
+                        for th in to_hosp:
+                            to_row = today_df[today_df["hospital"] == th]
+                            if not to_row.empty:
+                                to_stock_val = int(to_row[f"{resource}_stock"].iloc[0])
+                                to_usage_val = int(to_row[f"{resource}_usage"].iloc[0])
+                                st.metric(f"To {th} - Stock", to_stock_val)
+                                st.metric(f"To {th} - Usage", to_usage_val)
+
 
                 feedback = st.text_area("Give feedback")
                 if st.button("Submit Feedback"):

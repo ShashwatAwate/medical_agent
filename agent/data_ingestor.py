@@ -10,8 +10,9 @@ import datetime
 def ingest_knowledge(state:State):
     """Ingests structured data which has been assumed to arrive every 2 weeks"""
     try:
+        print("INFO: Ingesting Knowledge")
         if state["window_data"].empty:
-                sim_df = sd.generate_data(start_date=state["sim_date"])
+                sim_df,dist_df = sd.generate_data(start_date=state["sim_date"])
                 today_df = sim_df
                 
                 state["today_date"] = state["sim_date"]
@@ -19,12 +20,13 @@ def ingest_knowledge(state:State):
                 state["tracking_data"] = today_df
                 state["tracking_hosps"] = set(today_df["hospital"].unique())
                 state["today_data"] = sim_df[sim_df["date"]==state["sim_date"]]
+                state["distances"] = dist_df
 
         elif state["days_since_update"]>=3:
 
             print("INFO: Recieved new data!")
 
-            sim_df = sd.generate_data(start_date=state["sim_date"])
+            sim_df,_ = sd.generate_data(start_date=state["sim_date"])
             today_df = sim_df
 
             # window_data: will have data from last 14 entries
@@ -55,6 +57,7 @@ def ingest_knowledge(state:State):
 def ingest_daily_reports(state: State):
     """Ingest and parse daily unstructured reports"""
     try:
+        print("INFO: Ingesting Daily Reports")
         daily_report = sd.generate_reports()
 
         llm_prompt = f"""

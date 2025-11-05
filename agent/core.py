@@ -35,6 +35,9 @@ class State(TypedDict):
     window_data: pd.DataFrame
     today_data: pd.DataFrame
     tracking_data: pd.DataFrame
+    distances: pd.DataFrame
+    shortages: list
+    surpluses: list
     tracking_hosps: set
     report_data: dict
     today_forecasts : dict

@@ -23,6 +23,7 @@ def save_state(state: State):
         state["window_data"].to_csv("./sim_outputs/window_data.csv", index=False)
         state["today_data"].to_csv("./sim_outputs/today_data.csv", index=False)
         state["tracking_data"].to_csv("./sim_outputs/tracking_data.csv",index=False)
+        state["distances"].to_csv("./sim_outputs/distances.csv",index=False)
     except Exception as e:
         print(f"ERROR: during writing state to disk {str(e)}")
     return state
@@ -40,6 +41,7 @@ def load_state():
         "window_data": pd.read_csv("./sim_outputs/window_data.csv"),
         "today_data": pd.read_csv("./sim_outputs/today_data.csv"),
         "tracking_data":pd.read_csv("./sim_outputs/tracking_data.csv"),
+        "distances":pd.read_csv("./sim_outputs/distances.csv"),
         "done": False,
     }
     except Exception as e:
