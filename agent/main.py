@@ -105,10 +105,11 @@ if __name__ == "__main__":
             if("state" not in st.session_state):
                 st.error("Initialize a simulation first!")
             else:
+                if st.button("Get Recommendation"):
+                    st.session_state["state"] = graph.invoke(st.session_state["state"])
+                    save_state(st.session_state["state"])
 
-                st.session_state["state"] = graph.invoke(st.session_state["state"])
                 state = st.session_state["state"]
-
                 st.subheader("Recommendation")
                 st.write(state.get("recommendation", "No recommendation available."))
 
@@ -121,7 +122,8 @@ if __name__ == "__main__":
                 else:
                     from_hosp = res_meta.get("from", [])
                     to_hosp = res_meta.get("to", [])
-                    resource = res_meta.get("resource", None)
+                    resource = res_meta.get("resource", "").lower()
+                    rec_qty = res_meta.get("quantity")
 
                     today_df = state.get("tracking_data", None)
                     if today_df is None or resource is None:
@@ -136,30 +138,70 @@ if __name__ == "__main__":
                         st.markdown("### Resource Transfer Details")
                         st.write(f"**Resource:** {resource}")
 
-                        # Display metrics for each 'from' hospital
+                        from_data = []
                         for fh in from_hosp:
                             from_row = today_df[today_df["hospital"] == fh]
                             if not from_row.empty:
-                                from_stock_val = int(from_row[f"{resource}_stock"].iloc[0])
-                                from_usage_val = int(from_row[f"{resource}_usage"].iloc[0])
-                                st.metric(f"From {fh} - Stock", from_stock_val)
-                                st.metric(f"From {fh} - Usage", from_usage_val)
+                                from_data.append({
+                                    "Hospital": fh,
+                                    "Stock": int(from_row[f"{resource}_stock"].iloc[0]),
+                                    "Usage": int(from_row[f"{resource}_usage"].iloc[0])
+                                })
 
-                        # Display metrics for each 'to' hospital
+                        # Prepare "To Hospitals" data
+                        to_data = []
                         for th in to_hosp:
                             to_row = today_df[today_df["hospital"] == th]
                             if not to_row.empty:
-                                to_stock_val = int(to_row[f"{resource}_stock"].iloc[0])
-                                to_usage_val = int(to_row[f"{resource}_usage"].iloc[0])
-                                st.metric(f"To {th} - Stock", to_stock_val)
-                                st.metric(f"To {th} - Usage", to_usage_val)
+                                to_data.append({
+                                    "Hospital": th,
+                                    "Stock": int(to_row[f"{resource}_stock"].iloc[0]),
+                                    "Usage": int(to_row[f"{resource}_usage"].iloc[0])
+                                })
+                col1, col2 = st.columns(2)
 
+                with col1:
+                    st.subheader("From Hospitals")
+                    if from_data:
+                        st.dataframe(pd.DataFrame(from_data), width="stretch")
+                    else:
+                        st.info("No data for from hospitals")
 
-                feedback = st.text_area("Give feedback")
-                if st.button("Submit Feedback"):
-                    st.session_state["state"] = get_feedback(st.session_state["state"],feedback)
-                    save_state(st.session_state["state"])
-                    st.write("Updated Recommendation Weights:", st.session_state["state"]["recommendation_weights"])
+                with col2:
+                    st.subheader("To Hospitals")
+                    if to_data:
+                        st.dataframe(pd.DataFrame(to_data), width="stretch")
+                    else:
+                        st.info("No data for to hospitals")
+
+                st.write(f"**Quantity to transfer** {rec_qty}")
+                col1,col2 = st.columns(2)
+                with col1:
+                    accept_click = st.button("Accept")
+                with col2:
+                    reject_click = st.button("Reject")
+                transfer_quantities = {}
+                reason = ""
+                approval = False
+                if accept_click:
+                    approval = True
+                    st.subheader("Adjust Quantities")
+                    transfer_quantities = {}
+                    for fh in from_hosp:
+                        for th in to_hosp:
+                            default = res_meta.get("quantity",0)
+                            val_str = st.text_input("Enter quantity", value=str(default))
+                            qty = int(val_str)
+                            transfer_quantities[(fh,th)] = qty
+                elif reject_click:
+                    reason = st.text_area("Specify reason for rejection")
+                
+                if accept_click or reject_click:
+                    if st.button("Submit Feedback"):
+                        st.session_state["state"] = get_feedback(st.session_state["state"],approval=approval,transfer_vals=transfer_quantities,reason=reason)
+                        save_state(st.session_state["state"])
+                        st.write("Updated Recommendation Weights:", st.session_state["state"]["recommendation_weights"])
+
     except Exception as e:
         print(f"ERROR: in main function {str(e)}")
         print(f"{type(e).__name__}")

@@ -241,64 +241,22 @@ def build_recommendations(state: State):
     return state
 
 
-def get_feedback(state: State,feedback_str: str):
+def get_feedback(state: State,approval:bool,transfer_vals:dict = {},reason:str = ""):
     """Adjusts weights based on feedback"""
 
     try:
-        feedback = feedback_str
 
-        feedback = feedback.lower()
-        feedback_words = feedback.split()
-
-        user_approval = False
-        approval_words = ["yes","yes transfer","definitely transfer","ok"]
         print(f"Before update: {state["recommendation_weights"]}")
-        for word in feedback_words:
-            if word in approval_words:
-                print("INFO: User approved the change")
-                user_approval = True
-                for weight in state["recommendation_weights"].keys():
-                    state["recommendation_weights"][weight] += 0.02
-                break
-
-        concepts = {
-        "cost": "concerns about expenses, distance, or transportation costs",
-        "coverage": "ensuring enough resources are available across all hospitals or regions",
-        "fairness": "equal distribution, fairness, or resource equity among hospitals",
-        "urgency": "emergency, immediate need, or life-critical situations"
-        }
-
-        concept_embs = {k: model.encode(v,normalize_embeddings=True) for k,v in concepts.items()}
-        feedback_emb = model.encode(feedback,normalize_embeddings=True).reshape(1,-1)
-        justification_emb = model.encode(state["recommendation_justification"],normalize_embeddings=True).reshape(1,-1)
-
-
-        delta_max = 0.05
-        for concept,emb in concept_embs.items():
-            feedback_sim = cosine_similarity(feedback_emb,emb.reshape(1,-1))[0][0]
-            justification_sim = cosine_similarity(justification_emb, emb.reshape(1,-1))[0][0]
-            print(f"INFO: feedback_sim: {feedback_sim}, justification_sim:{justification_sim}")
-            sim = 0.4*feedback_sim + 0.6*justification_sim
-            print(f"INFO: overall sim: {sim}")
-
-            offset = 0
-            offset = (max(sim,0.08) - 0.08)/(0.6)*delta_max
-            print(f"INFO: offset: {offset}")
-            if(user_approval):
-                state["recommendation_weights"][concept] += float(offset)
-            else:
-                state["recommendation_weights"][concept] -= float(offset)
-
-        print(f"After update: {state["recommendation_weights"]}")
-
-        if user_approval==True:
+        if approval:
+            for weight in state["recommendation_weights"].keys():
+                state["recommendation_weights"][weight] += 0.02
             meta = state.get("recommendation_meta")
             if isinstance(meta,dict) and meta.get("resource"):
                 resource = meta["resource"]
                 from_hos = meta.get("from", [])
                 to_hos = meta.get("to", [])
-                qty = meta.get("quantity", 0)
-
+                qty = transfer_vals.get((from_hos,to_hos),0)
+                print(f"INFO: for {resource} qty is {qty}")
                 today_df = state["today_data"]
 
                 today_df.loc[today_df["hospital"]==(hos for hos in from_hos),f"{resource}_stock"] -= qty
@@ -309,11 +267,39 @@ def get_feedback(state: State,feedback_str: str):
                 state["tracking_data"] = state["tracking_data"][state["tracking_data"]["date"].isin(recent_dates)]
 
                 state["today_data"] = today_df
+        else:
+            concepts = {
+            "cost": "concerns about expenses, distance, or transportation costs",
+            "coverage": "ensuring enough resources are available across all hospitals or regions",
+            "fairness": "equal distribution, fairness, or resource equity among hospitals",
+            "urgency": "emergency, immediate need, or life-critical situations"
+            }
 
-        state["sim_date"] += datetime.timedelta(days=1)
-        state["days_since_update"]+=1
+            concept_embs = {k: model.encode(v,normalize_embeddings=True) for k,v in concepts.items()}
+            feedback_emb = model.encode(reason,normalize_embeddings=True).reshape(1,-1)
+            justification_emb = model.encode(state["recommendation_justification"],normalize_embeddings=True).reshape(1,-1)
 
-        print(state["tracking_data"]["hospital"].unique())
+
+            delta_max = 0.1
+            for concept,emb in concept_embs.items():
+                feedback_sim = cosine_similarity(feedback_emb,emb.reshape(1,-1))[0][0]
+                justification_sim = cosine_similarity(justification_emb, emb.reshape(1,-1))[0][0]
+                print(f"INFO: feedback_sim: {feedback_sim}, justification_sim:{justification_sim}")
+                sim = 0.4*feedback_sim + 0.6*justification_sim
+                print(f"INFO: overall sim: {sim}")
+
+                offset = 0
+                offset = (max(sim,0.08) - 0.08)/(0.6)*delta_max
+                print(f"INFO: offset: {offset}")
+                state["recommendation_weights"][concept] -= float(offset)
+
+            print(f"After update: {state["recommendation_weights"]}")
+
+            state["sim_date"] += datetime.timedelta(days=1)
+            state["days_since_update"]+=1
+
+            print(state["tracking_data"]["hospital"].unique())
+
     except Exception as e:
         print(f"ERROR: during feedback func {str(e)}")
         print(f"{type(e).__name__}")
