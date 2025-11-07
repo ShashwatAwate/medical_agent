@@ -7,11 +7,11 @@ import os
 
 class SyntheticData:
 
-    def __init__(self,save_path: str,n_hospitals = 5, resourcs = ["oxygen","ventilators","medication_TB","ppe_kits"]):
+    def __init__(self,save_path: str,n_hospitals = 5, resources = ["oxygen","ventilators","medication_TB","ppe_kits"]):
         self.save_path = save_path
         self.simulation = pd.DataFrame()
         self.n_hospitals = n_hospitals
-        self.resources = resourcs
+        self.resources = resources
         self.regions = ["north","south","east","west","central"]
         self.hospitals = [f"hos_{i+1}" for i in range(self.n_hospitals)]
 

@@ -18,7 +18,9 @@ def save_state(state: State):
                 "recommendation":state["recommendation"],
                 "days_since_update": state["days_since_update"],
                 "recommendation_weights": state["recommendation_weights"],
-                "tracking_hosps": list(state["tracking_hosps"])
+                "tracking_hosps": list(state["tracking_hosps"]),
+                "resource_names": list(state["resource_names"]),
+                "num_hospitals": state["num_hospitals"]
             },f,indent=4)
         state["window_data"].to_csv("./sim_outputs/window_data.csv", index=False)
         state["today_data"].to_csv("./sim_outputs/today_data.csv", index=False)
@@ -26,6 +28,7 @@ def save_state(state: State):
         state["distances"].to_csv("./sim_outputs/distances.csv",index=False)
     except Exception as e:
         print(f"ERROR: during writing state to disk {str(e)}")
+        state = None
     return state
 
 def load_state():
@@ -38,13 +41,17 @@ def load_state():
         "days_since_update": saved["days_since_update"],
         "recommendation_weights": saved["recommendation_weights"],
         "tracking_hosps": set(saved["tracking_hosps"]),
-        "window_data": pd.read_csv("./sim_outputs/window_data.csv"),
-        "today_data": pd.read_csv("./sim_outputs/today_data.csv"),
-        "tracking_data":pd.read_csv("./sim_outputs/tracking_data.csv"),
+        "window_data": pd.read_csv("./sim_outputs/window_data.csv",parse_dates=["date"]),
+        "today_data": pd.read_csv("./sim_outputs/today_data.csv",parse_dates=["date"]),
+        "tracking_data":pd.read_csv("./sim_outputs/tracking_data.csv",parse_dates=["date"]),
         "distances":pd.read_csv("./sim_outputs/distances.csv"),
+        "num_hospitals":saved["num_hospitals"],
+        "resource_names":saved["resource_names"],
+        "recommendation": saved["recommendation"],
         "done": False,
     }
     except Exception as e:
         print(f"ERROR: during loading state from disc {str(e)}")
+        state = None
     
     return state

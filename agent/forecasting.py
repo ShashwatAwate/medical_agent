@@ -1,4 +1,4 @@
-from agent.core import State,sd
+from agent.core import State
 import pandas as pd
 
 def forecast_data(state: State):
@@ -18,7 +18,7 @@ def forecast_data(state: State):
         for hospital in state["tracking_hosps"]:
             hospital_df = window_df[window_df["hospital"]==hospital].sort_values("date")
             hospital_forecasts = {}
-            for resource in sd.resources:
+            for resource in state.get("resource_names",[]):
 
                 trend = hospital_df[f"{resource}_usage"].diff().rolling(window=7).mean().iloc[-1]
                 base = hospital_df[f"{resource}_usage"].iloc[-1]
@@ -42,7 +42,7 @@ def draw_conclusions(state: State):
         shortages = []
 
         for hosp,preds in state["today_forecasts"].items():
-            for res in sd.resources:
+            for res in state.get("resource_names",[]):
                 #get latest stock for that resource
                 stock = state["tracking_data"].query("hospital==@hosp")[f"{res}_stock"].iloc[-1]
                 forecast = preds[f"{res}_forecast"]

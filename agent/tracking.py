@@ -1,4 +1,4 @@
-from agent.core import State,sd
+from agent.core import State
 
 
 def setup_tracking(state: State, selected_hospitals: list = None):

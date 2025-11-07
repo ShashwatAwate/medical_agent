@@ -1,10 +1,10 @@
 import pandas as pd
 
 
-from agent.core import State,llm_client,sd,MODEL_NAME
+from agent.core import State,llm_client,MODEL_NAME,SAVE_PATH
 from agent.utils import parse_model_res
 from google.genai import types
-import datetime
+from agent.data.generate_data import SyntheticData
 
 
 def ingest_knowledge(state:State):
@@ -12,6 +12,9 @@ def ingest_knowledge(state:State):
     try:
         print("INFO: Ingesting Knowledge")
         if state["window_data"].empty:
+                num_hosps = state.get("num_hospitals")
+                resources = state.get("resource_names")
+                sd = SyntheticData(SAVE_PATH,n_hospitals=num_hosps,resources=resources)
                 sim_df,dist_df = sd.generate_data(start_date=state["sim_date"])
                 today_df = sim_df
                 
@@ -59,6 +62,12 @@ def ingest_daily_reports(state: State):
     """Ingest and parse daily unstructured reports"""
     try:
         print("INFO: Ingesting Daily Reports")
+        
+        num_hosps = state.get("num_hospitals")
+        resources = state.get("resource_names")
+
+        sd = SyntheticData(SAVE_PATH,num_hosps,resources)
+
         daily_report = sd.generate_reports()
 
         llm_prompt = f"""

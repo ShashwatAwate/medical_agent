@@ -1,13 +1,14 @@
 from langgraph.graph import StateGraph,START,END
 import pandas as pd
 
-from agent.core import State,sd
+from agent.core import State
 
 from agent.data_ingestor import ingest_knowledge,ingest_daily_reports
 from agent.forecasting import forecast_data,draw_conclusions
 from agent.recommendations import build_recommendations,get_feedback
 from agent.persistence import save_state,load_state
 from agent.tracking import setup_tracking
+from agent.data_insights import show_insights
 
 import datetime
 import os
@@ -45,6 +46,7 @@ initial_state: State = {
     "distances":pd.DataFrame(),
     "shortages":list,
     "surpluses":list,
+    "num_hospitals":0,
     "resource_names":[],
     "report_data": {},
     "today_forecasts": {},
@@ -61,12 +63,13 @@ initial_state: State = {
 if __name__ == "__main__":
 
     try:
-        action = st.sidebar.selectbox("Choose Action",["Home","Tracking","Recommend"])
+        action = st.sidebar.selectbox("Choose Action",["Home","Tracking","Recommend","Insights"])
 
-        if action=="Home":
+        if action == "Home":
             st.header("Welcome to the hospital agent dashboard")
 
             st.write("Simulation")
+
             if os.path.exists("./sim_outputs/state.json"):
                 sim_mode = st.radio(
                     "Select simulation mode:",
@@ -75,16 +78,51 @@ if __name__ == "__main__":
                 )
             else:
                 sim_mode = "Start New Simulation"
+
+            
             if st.button("Confirm Choice"):
-                if sim_mode == "Start New Simulation":
+                st.session_state["sim_mode_confirmed"] = sim_mode
+
+            if st.session_state.get("sim_mode_confirmed") == "Start New Simulation":
+                print("INFO: in start new simulation")
+                num_hosp = st.number_input("Number of hospitals:", min_value=2, max_value=20, value=5)
+                base_resources = ["oxygen", "ventilators", "medication_TB", "ppe_kits"]
+
+                resources = st.multiselect(
+                    "Select resources to include",
+                    base_resources,
+                    default=base_resources
+                )
+
+                custom_resources_inp = st.text_input(
+                    "Add custom resource names (separate with commas)"
+                )
+
+                custom_resources = [r.strip() for r in custom_resources_inp.split(",") if r.strip()]
+
+                final_resources = list(dict.fromkeys(resources + custom_resources))
+                st.write("Final simulation resources:", final_resources)
+
+                if st.button("Start Simulation"):
+                    print("INFO: pressed start simulation")
                     state = initial_state
+                    state["resource_names"] = final_resources
+                    state["num_hospitals"] = num_hosp
+                    state = ingest_knowledge(state)
                     st.session_state["state"] = state
                     st.success("New simulation started")
+
+            elif st.session_state.get("sim_mode_confirmed") == "Continue Previous Simulation":
+                state = load_state()
+                if state is None:
+                    st.error("Could not load saved state — the file is empty, corrupted, or incomplete.")
+                    st.info("Please start a new simulation instead.")
                 else:
-                    state = load_state()
                     st.session_state["state"] = state
                     st.info("Continuing previous simulation")
 
+            
+            if "state" in st.session_state:
                 st.subheader(f"Current simulation date: {st.session_state['state']['sim_date'].strftime('%Y-%m-%d')}")
 
         elif action=="Tracking":
@@ -220,7 +258,12 @@ if __name__ == "__main__":
                                 save_state(st.session_state["state"])
                                 st.info("Rejection submitted.")
                                 st.session_state["feedback_mode"] = None
-                
+        elif action=="Insights":
+            state = st.session_state.get("state")
+            if state is None:
+                st.info("Run a simulation first!")
+            else:
+                show_insights(state=state)
     except Exception as e:
         print(f"ERROR: in main function {str(e)}")
         print(f"{type(e).__name__}")

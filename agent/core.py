@@ -17,7 +17,7 @@ SAVE_PATH = "./sim_data"
 MODEL_NAME = "gemini-2.5-flash-lite"
 llm_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-sd = SyntheticData(save_path=SAVE_PATH)
+
 
 try:
     sim_path = os.path.join(SAVE_PATH,"simulation.csv")
@@ -38,6 +38,7 @@ class State(TypedDict):
     distances: pd.DataFrame
     shortages: list
     surpluses: list
+    num_hospitals:int
     resource_names: list
     tracking_hosps: set
     report_data: dict

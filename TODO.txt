@@ -1,7 +1,2 @@
-Update the ingestion logic 
-Update ingestion so that tracking can be set before running a recommendation
-
-Graph based distances between hospitals
-Provide additional data to recommender
 Remove LLM from parsing of unstructured data
 
