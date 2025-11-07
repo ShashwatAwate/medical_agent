@@ -170,7 +170,8 @@ def llm_recommendation(state:State):
     9.If there are no actionable imbalances between the tracked hospitals, clearly state that in the recommendation and justification fields.
     10.**Do NOT provide multiple transfers or a list of transfers. Only ONE transfer should be included.**
     11.**The "meta" field MUST be a single object, NOT a list or array.**
-    12.The JSON must exactly match this structure (no extra keys):
+    12. GIVE REALISTIC QUANTITIES, NEVER RECOMMEND TO NUMBERS MORE THAN OR EQUAL TO THE ENTIRE SURPLUS STOCK
+    13.The JSON must exactly match this structure (no extra keys):
 
     **JSON Format:**
     {{
@@ -303,12 +304,12 @@ def get_feedback(state: State,approval:bool,transfer_vals:dict = {},reason:str =
                 print(f"INFO: offset: {offset}")
                 state["recommendation_weights"][concept] -= float(offset)
 
-            print(f"After update: {state["recommendation_weights"]}")
 
-            state["sim_date"] += datetime.timedelta(days=1)
-            state["days_since_update"]+=1
-
-            print(state["tracking_data"]["hospital"].unique())
+        print(f"After update: {state["recommendation_weights"]}")
+        print(f"INFO: days since last update(feedback): {state["days_since_update"]}")
+        state["sim_date"] += datetime.timedelta(days=1)
+        state["days_since_update"]+=1
+        print(state["tracking_data"]["hospital"].unique())
 
     except Exception as e:
         print(f"ERROR: during feedback func {str(e)}")

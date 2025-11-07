@@ -140,6 +140,7 @@ if __name__ == "__main__":
                 if st.button("Update Tracking"):
                     st.session_state["state"] = setup_tracking(st.session_state["state"],selected_hospitals)
                     st.success("Tracking Updated")
+
         elif action == "Recommend":
             if "state" not in st.session_state:
                 st.error("Initialize a simulation first!")
@@ -205,7 +206,7 @@ if __name__ == "__main__":
 
                         st.write(f"**Quantity to transfer:** {rec_qty}")
 
-                        # Maintain UI state properly across reruns
+                       
                         if "feedback_mode" not in st.session_state:
                             st.session_state["feedback_mode"] = None
 
@@ -219,33 +220,64 @@ if __name__ == "__main__":
 
                         if st.session_state["feedback_mode"] == "accept":
                             st.subheader("Adjust Quantities")
-                            transfer_quantities = {}
+                            transfer_quantities = st.session_state.get("transfer_quantities", {})  
+                        
+                            total_pairs = len(from_hosp) * len(to_hosp)
+                            confirmed_count = len(transfer_quantities)
+                        
                             for fh in from_hosp:
                                 for th in to_hosp:
+                                    key = f"{fh}_{th}"
                                     default = res_meta.get("quantity", 0)
-                                    qty_str = st.text_input(f"{fh} → {th}", value=str(default), key=f"{fh}_{th}")
-                                    try:
-                                        hosp_df = today_df[today_df["hospital"]==fh]
-                                        qty = int(qty_str)
-                                        if qty<0 or qty>hosp_df[f"{resource}_stock"].iloc[0]:
-                                            st.info("Invalid quantity entered! Defaulting to recommended value")
-                                            qty = default
-                                    except ValueError:
-                                        print("ERROR: Encountered value error")
-                                        qty = 0
-                                    transfer_quantities[(fh, th)] = qty
-
+                        
+                                    hosp_df = today_df[today_df["hospital"] == fh]
+                                    stock = hosp_df[f"{resource}_stock"].iloc[0]
+                        
+                                    if isinstance(default, (int, float)) and default > stock:
+                                        st.warning(
+                                            f"The suggested quantity ({default}) exceeds available stock ({stock}). "
+                                            "Please review before confirming."
+                                        )
+                        
+                                    qty_str = st.text_input(f"{fh} -> {th}", value=str(default), key=f"qty_{key}")
+                        
+                                    if st.button(f"Confirm {fh} -> {th}", key=f"confirm_{key}"):
+                                        try:
+                                            qty = int(qty_str)
+                                            if qty < 0 or qty > stock:
+                                                st.info("Invalid quantity entered! Defaulting to recommended value.")
+                                                qty = default
+                                        except ValueError:
+                                            st.warning("Invalid input. Defaulting to 0.")
+                                            qty = 0
+                        
+                                        transfer_quantities[(fh, th)] = qty
+                                        st.session_state["transfer_quantities"] = transfer_quantities
+                                        st.success(f"Confirmed: {fh} -> {th} = {qty}")
+                        
+                            
+                            if len(transfer_quantities) == total_pairs:
+                                st.info("All quantities confirmed — ready to submit feedback.")
+                            else:
+                                remaining = total_pairs - len(transfer_quantities)
+                                st.warning(f"{remaining} transfer(s) still need confirmation.")
+                        
+                            
                             if st.button("Submit Feedback"):
-                                st.session_state["state"] = get_feedback(
-                                    st.session_state["state"],
-                                    approval=True,
-                                    transfer_vals=transfer_quantities,
-                                    reason=""
-                                )
-                                save_state(st.session_state["state"])
-                                st.success("Feedback submitted successfully!")
-                                st.session_state["feedback_mode"] = None
-
+                                if len(transfer_quantities) < total_pairs:
+                                    st.warning("Please confirm all quantities before submitting.")
+                                else:
+                                    st.session_state["state"] = get_feedback(
+                                        st.session_state["state"],
+                                        approval=True,
+                                        transfer_vals=transfer_quantities,
+                                        reason=""
+                                    )
+                                    save_state(st.session_state["state"])
+                                    st.success("Feedback submitted successfully! Press 'Get Recommendation' to get new recommendation")
+                                    del st.session_state["transfer_quantities"]
+                                    st.session_state["feedback_mode"] = None
+                        
                         elif st.session_state["feedback_mode"] == "reject":
                             reason = st.text_area("Specify reason for rejection")
                             if st.button("Submit Rejection"):
@@ -256,7 +288,7 @@ if __name__ == "__main__":
                                     reason=reason
                                 )
                                 save_state(st.session_state["state"])
-                                st.info("Rejection submitted.")
+                                st.info("Rejection submitted. Press 'Get Recommendation' to get new recommendation")
                                 st.session_state["feedback_mode"] = None
         elif action=="Insights":
             state = st.session_state.get("state")

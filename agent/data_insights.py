@@ -8,7 +8,7 @@ from agent.core import State
 def show_insights(state: State):
     st.title("Data Insights")
     try:
-        df = state.get("window_data").copy()
+        df = state.get("tracking_data").copy()
         df["date"] = pd.to_datetime(df["date"],errors="coerce").dt.date
         st.subheader("Overview")
         st.write(df.describe())

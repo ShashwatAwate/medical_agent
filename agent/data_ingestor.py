@@ -11,10 +11,13 @@ def ingest_knowledge(state:State):
     """Ingests structured data which has been assumed to arrive every 2 weeks"""
     try:
         print("INFO: Ingesting Knowledge")
+        print(f"INFO: days since last update(ingestor): {state["days_since_update"]}")
+        
+        num_hosps = state.get("num_hospitals")
+        resources = state.get("resource_names")        
+        sd = SyntheticData(SAVE_PATH,n_hospitals=num_hosps,resources=resources)
         if state["window_data"].empty:
-                num_hosps = state.get("num_hospitals")
-                resources = state.get("resource_names")
-                sd = SyntheticData(SAVE_PATH,n_hospitals=num_hosps,resources=resources)
+
                 sim_df,dist_df = sd.generate_data(start_date=state["sim_date"])
                 today_df = sim_df
                 
