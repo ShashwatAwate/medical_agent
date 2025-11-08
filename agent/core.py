@@ -19,16 +19,6 @@ llm_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
 
-try:
-    sim_path = os.path.join(SAVE_PATH,"simulation.csv")
-    
-
-    sim_df = pd.read_csv(sim_path)
-except Exception as e:
-    print(f"ERROR: {str(e)}")
-    exit()
-
-
 class State(TypedDict):
     sim_date:datetime
     days_since_update: int
