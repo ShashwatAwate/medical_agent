@@ -1,5 +1,5 @@
 [project]
-name = "medial-agent"
+name = "medical-agent"
 version = "0.1.0"
 description = "Medical agent that recommends optimal actions and learns on user input."
 authors = [{name = "Shashwat"}]

@@ -308,21 +308,21 @@ medial-agent/
 ### Issue: ModuleNotFoundError
 
 **Solution:** Ensure all dependencies are installed:
-\`\`\`bash
+```bash
 pip install -e .
-\`\`\`
+```
 
 Or install individually:
-\`\`\`bash
+```bash
 pip install streamlit numpy pandas langgraph google-generativeai python-dotenv sentence-transformers faiss-cpu scikit-learn
-\`\`\`
+```
 
 ### Issue: GEMINI_API_KEY not found
 
 **Solution:** Verify that your \`.env\` file exists in the project root and contains:
-\`\`\`env
+```env
 GEMINI_API_KEY=your_key_here
-\`\`\`
+```
 
 Make sure the file is named \`.env\` (not \`.env.txt\` or other variations). Restart Streamlit after adding the key.
 
@@ -343,9 +343,9 @@ Make sure the file is named \`.env\` (not \`.env.txt\` or other variations). Res
 ### Issue: Port 8501 already in use
 
 **Solution:** Run Streamlit on a different port:
-\`\`\`bash
+```bash
 streamlit run main.py --server.port 8502
-\`\`\`
+```
 
 ### Issue: Slow performance on first run
 
@@ -378,13 +378,13 @@ This is intentional to account for emergency scenarios where resource needs spik
 ### Modifying Recommendation Scoring
 
 Edit the scoring function in \`agent/recommendations.py\`:
-\`\`\`python
+```python
 distance_score = w_cost * (1 - (avg_dist / max_dist))
 coverage_score = w_coverage * (min(shortage, available_surplus) / shortage)
 fairness_score = w_fairness * (1 - abs(available_surplus - shortage) / (available_surplus + shortage))
 urgency_score = w_urgency * severity_score[severity]
 score = distance_score + coverage_score + fairness_score + urgency_score
-\`\`\`
+```
 
 ### Customizing Event Types
 
