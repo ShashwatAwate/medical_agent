@@ -36,7 +36,7 @@ dependencies = [
     "numpy",
     "pandas",
     "langgraph",
-    "google-generativeai",
+    "google-genai",
     "python-dotenv",
     "sentence-transformers",
     "faiss-cpu",
