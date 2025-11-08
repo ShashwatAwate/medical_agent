@@ -14,6 +14,7 @@ class SyntheticData:
         self.resources = resources
         self.regions = ["north","south","east","west","central"]
         self.hospitals = [f"hos_{i+1}" for i in range(self.n_hospitals)]
+        os.makedirs(save_path,exist_ok=True)
 
     def generate_data(self,seed = 42,start_date = datetime.today()) :
         """Generates a simulation of n_weeks with random usage spikes and uses given resources"""
