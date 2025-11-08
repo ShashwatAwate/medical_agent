@@ -2,7 +2,7 @@
 
 ### 1. Clone the Repository
 
-```bash
+```
 git clone https://github.com/ShashwatAwate/medical_agent.git
 cd medical-agent
 ```
@@ -10,13 +10,13 @@ cd medical-agent
 ### 2. Create a Virtual Environment (Recommended)
 
 **On macOS/Linux:**
-```bash
+```
 python3 -m venv venv
 source venv/bin/activate
 ```
 
 **On Windows:**
-```bash
+```
 python -m venv venv
 venv\Scripts\activate
 ```
@@ -25,7 +25,7 @@ venv\Scripts\activate
 
 Before installing, make sure your \`pyproject.toml\` includes all required dependencies:
 
-```toml
+```
 [project]
 name = "medial-agent"
 version = "0.1.0"
@@ -50,13 +50,13 @@ build-backend = "setuptools.build_meta"
 
 ### 4. Install Dependencies
 
-```bash
+```
 pip install -e .
 ```
 
 Or, if you prefer installing with pip directly:
 
-```bash
+```
 pip install streamlit numpy pandas langgraph google-generativeai python-dotenv sentence-transformers faiss-cpu scikit-learn
 ```
 
@@ -66,7 +66,7 @@ pip install streamlit numpy pandas langgraph google-generativeai python-dotenv s
 
 Create a \`.env\` file in the project root directory:
 
-```bash
+```
 touch .env
 ```
 
@@ -87,7 +87,7 @@ GEMINI_API_KEY=your_google_generative_ai_api_key_here
 
 ### Start the Streamlit App
 
-```bash
+```
 streamlit run main.py
 ```
 
