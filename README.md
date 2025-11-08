@@ -399,7 +399,7 @@ See \`pyproject.toml\` for the complete list:
 - **pandas**: Data manipulation and analysis
 - **numpy**: Numerical computing
 - **langgraph**: Workflow orchestration and state management
-- **google-generativeai**: Gemini API access for recommendations
+- **google-genai**: Gemini API access for recommendations
 - **sentence-transformers**: NLP embeddings for feedback analysis
 - **faiss-cpu**: Vector similarity search and clustering
 - **scikit-learn**: Machine learning utilities (cosine similarity)
