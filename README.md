@@ -45,16 +45,19 @@ END
 ### Detailed Node Descriptions
 
 **1. ingest_knowledge** (`agent/data_ingestor.py`)
-- Initializes simulation by generating 14 days of synthetic hospital data
+- Simulation of ingesting structured hospital inventory data.
+- Initializes simulation by generating 14 days of synthetic hospital data.
 - Creates inter-hospital distance matrix for logistics calculations
 - Generates baseline resource stocks, usage patterns, and hospital metadata
+- New data will come every 14 simulated days, simulating ingestion of structured data.
 - **Output**: `window_data` (14-day history), `distances` (hospital distance matrix)
 
 **2. ingest_daily_reports** (`agent/data_ingestor.py`)
+- Simulation of ingesting unstructured data.
 - Generates contextual reports explaining resource usage spikes
 - Assigns severity levels (mild, moderate, severe, critical) based on event type
 - Filters data to only tracked hospitals
-- **Output**: `report_data` (event context & severity), `tracking_data` (monitored hospitals only)
+- **Output**: `report_data` (event context & severity)
 
 **3. forecast_data** (`agent/forecasting.py`)
 - Calculates 7-day rolling average trend for each resource per hospital

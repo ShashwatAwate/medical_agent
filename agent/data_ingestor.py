@@ -29,7 +29,7 @@ def ingest_knowledge(state:State):
                 state["distances"] = dist_df
                 state["resource_names"] = sd.resources
                 
-        elif state["days_since_update"]>=3:
+        elif state["days_since_update"]>=14:
 
             print("INFO: Recieved new data!")
 
