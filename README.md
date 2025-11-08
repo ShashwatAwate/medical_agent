@@ -24,23 +24,23 @@ A Streamlit-based AI agent for intelligent hospital resource allocation using La
 
 The application implements a state machine with 7 nodes that orchestrate hospital data analysis and recommendation generation:
 
-\`\`\`
+
 START 
-  ↓
+  
 1. ingest_knowledge 
-  ↓
+  
 2. ingest_daily_reports 
-  ↓
+  
 3. forecast_data 
-  ↓
+  
 4. draw_conclusions 
-  ↓
+  
 5. build_recommendations 
-  ↓
+  
 6. save_state 
-  ↓
+  
 END
-\`\`\`
+
 
 ### Detailed Node Descriptions
 
@@ -87,7 +87,7 @@ END
 
 The `State` (TypedDict in `agent/core.py`) maintains all workflow data:
 
-\`\`\`python
+python
 {
   "sim_date": datetime,              # Current simulation date
   "days_since_update": int,          # Days elapsed since last feedback
@@ -109,7 +109,7 @@ The `State` (TypedDict in `agent/core.py`) maintains all workflow data:
   "user_feedback": str,              # User's feedback on recommendation
   "done": bool                       # Workflow completion flag
 }
-\`\`\`
+
 
 ---
 
@@ -163,14 +163,13 @@ The `generate_reports()` function creates contextual narratives:
 - Diagonal = 0 (distance from hospital to itself)
 - Used by recommendation engine to optimize logistics costs
 - Example (5 hospitals):
-\`\`\`
      hos_1  hos_2  hos_3  hos_4  hos_5
 hos_1   0     150    320     45    280
 hos_2  150     0     210    175    350
 hos_3  320    210     0     290    120
 hos_4   45    175    290     0     360
 hos_5  280    350    120    360     0
-\`\`\`
+
 
 ### Example Generated Data
 
@@ -270,7 +269,7 @@ The system balances 4 key metrics to generate recommendations. Weights range fro
 
 ## Project Structure
 
-\`\`\`
+
 medial-agent/
 ├── main.py                         # Streamlit app entry point & UI flows
 ├── agent/
@@ -291,7 +290,7 @@ medial-agent/
 ├── .env                            # Environment variables (create manually)
 ├── pyproject.toml                  # Project configuration and dependencies
 └── README.md                       # This file
-\`\`\`
+
 
 ## Features
 
@@ -369,27 +368,6 @@ This is intentional to account for emergency scenarios where resource needs spik
 3. Click "Get Recommendation" again for a new suggestion
 
 ---
-
-## Development
-
-### Deactivate Virtual Environment
-
-\`\`\`bash
-deactivate
-\`\`\`
-
-### Reinstall in Development Mode
-
-\`\`\`bash
-pip install -e . --upgrade
-\`\`\`
-
-### Run with Verbose Logging
-
-\`\`\`bash
-streamlit run main.py --logger.level=debug
-\`\`\`
-
 ### Adding New Resources
 
 1. Open \`main.py\`
