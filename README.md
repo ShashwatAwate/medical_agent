@@ -87,7 +87,7 @@ END
 
 The `State` (TypedDict in `agent/core.py`) maintains all workflow data:
 
-python
+```
 {
   "sim_date": datetime,              # Current simulation date
   "days_since_update": int,          # Days elapsed since last feedback
@@ -109,7 +109,7 @@ python
   "user_feedback": str,              # User's feedback on recommendation
   "done": bool                       # Workflow completion flag
 }
-
+```
 
 ---
 
@@ -163,22 +163,23 @@ The `generate_reports()` function creates contextual narratives:
 - Diagonal = 0 (distance from hospital to itself)
 - Used by recommendation engine to optimize logistics costs
 - Example (5 hospitals):
+```
      hos_1  hos_2  hos_3  hos_4  hos_5
 hos_1   0     150    320     45    280
 hos_2  150     0     210    175    350
 hos_3  320    210     0     290    120
 hos_4   45    175    290     0     360
 hos_5  280    350    120    360     0
-
+```
 
 ### Example Generated Data
 
-\`\`\`csv
+```
 hospital,region,date,patients,staff,oxygen_stock,oxygen_usage,ventilators_stock,ventilators_usage,medication_TB_stock,medication_TB_usage,ppe_kits_stock,ppe_kits_usage
 hos_1,north,2025-01-01,650,120,550,320,600,150,480,210,720,145
 hos_1,north,2025-01-02,680,125,480,350,550,160,450,220,680,155
 hos_2,south,2025-01-01,780,95,480,410,520,200,520,280,650,190
-\`\`\`
+```
 
 ---
 
@@ -269,7 +270,7 @@ The system balances 4 key metrics to generate recommendations. Weights range fro
 
 ## Project Structure
 
-
+```
 medial-agent/
 ├── main.py                         # Streamlit app entry point & UI flows
 ├── agent/
@@ -290,7 +291,7 @@ medial-agent/
 ├── .env                            # Environment variables (create manually)
 ├── pyproject.toml                  # Project configuration and dependencies
 └── README.md                       # This file
-
+```
 
 ## Features
 
