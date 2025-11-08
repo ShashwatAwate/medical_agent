@@ -1,12 +1,18 @@
 [project]
 name = "medial-agent"
 version = "0.1.0"
-description = "My Streamlit app"
+description = "Medical agent that recommends optimal actions and learns on user input."
 authors = [{name = "Shashwat"}]
 dependencies = [
     "streamlit",
     "numpy",
-    "pandas"
+    "pandas",
+    "langgraph",
+    "google-generativeai",
+    "python-dotenv",
+    "sentence-transformers",
+    "faiss-cpu",
+    "scikit-learn"
 ]
 
 [build-system]
