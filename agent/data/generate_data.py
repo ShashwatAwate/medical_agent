@@ -7,67 +7,29 @@ import os
 
 class SyntheticData:
 
-    def __init__(self,save_path: str,n_hospitals = 5, resources = ["oxygen","ventilators","medication_TB","ppe_kits"]):
-        self.save_path = save_path
-        self.simulation = pd.DataFrame()
-        self.n_hospitals = n_hospitals
+    def __init__(self,resources = ["oxygen","ventilators","medication_TB","ppe_kits"]):
         self.resources = resources
         self.regions = ["north","south","east","west","central"]
-        self.hospitals = [f"hos_{i+1}" for i in range(self.n_hospitals)]
-        os.makedirs(save_path,exist_ok=True)
 
-    def generate_data(self,seed = 42,start_date = datetime.today()) :
+    def generate_data(self,seed = 42) :
         """Generates a simulation of n_weeks with random usage spikes and uses given resources"""
 
         np.random.seed(seed)
         random.seed(seed)
 
-        start = start_date - timedelta(days=13)
+        resource_data = {}
+        for resource in self.resources:
+            #randomly determine current stock for a resource and its base usage
+            current_stock = random.randint(200,800)
+            base_usage = random.randint(0,current_stock-100)
+            resource_data[resource] = {"usage":base_usage,"stock" : current_stock}
+        usage = {}
+        inventory = {}
+        for resource in resource_data.keys():
+            inventory[resource] = resource_data[resource]["stock"]
+            usage[resource] = resource_data[resource]["usage"]
         
-        data = []
-
-        for hospital in self.hospitals:
-            region = random.choice(self.regions)
-            date = start
-            for day in range(14):
-                resource_data = {}
-                for resource in self.resources:
-                    #randomly determine current stock for a resource and its base usage
-                    current_stock = random.randint(200,800)
-                    base_usage = random.randint(0,current_stock-100)
-
-                    resource_data[resource] = {"usage":base_usage,"stock" : current_stock}
-                
-                patients = random.randint(500,1000)
-                staff = random.randint(50,200)
-                current_entry = {"hospital":hospital,
-                                 "region":region,
-                                 "date":date,
-                                 "patients":patients,
-                                 "staff":staff
-                                 }
-                for resource in resource_data.keys():
-                    current_entry[f"{resource}_stock"] = resource_data[resource]["stock"]
-                    current_entry[f"{resource}_usage"] = resource_data[resource]["usage"]
-                data.append(current_entry)
-                date += timedelta(days=1)
-
-        df = pd.DataFrame(data)
-        self.simulation = df
-
-        distances = np.random.randint(5,500,size=(self.n_hospitals,self.n_hospitals))
-        for i in range(self.n_hospitals):
-            distances[i][i] = 0
-        distance_df = pd.DataFrame(data=distances,index=self.hospitals,columns=self.hospitals)
-        
-        try:
-            sim_path =  os.path.join(self.save_path,"simulation.csv")
-            self.simulation.to_csv(sim_path)
-        except Exception as e:
-            print(f"ERROR:{str(e)} during writing dataframes to disk ")
-            return
-        
-        return df,distance_df
+        return usage,inventory
 
 
     def generate_reports(self):
