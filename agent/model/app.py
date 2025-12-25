@@ -9,6 +9,9 @@ from mesa.visualization import (
 from mesa.visualization.components import AgentPortrayalStyle
 from .agents import State
 from .models import HospitalModel
+from .data.generate_data import SyntheticData
+
+sd = SyntheticData()
 
 def agent_potrayal(agent):
     node_color = {
@@ -28,19 +31,12 @@ model_params = {
     )
 }
 
-def post_process_lineplot(chart):
-    chart = chart.properties(
-        width=400,
-        height=400,
-    ).configure_legend(
-        strokeColor="black",
-        fillColor="#ECE9E9",
-        orient="right",
-        cornerRadius=5,
-        padding=10,
-        strokeWidth=1,
-    )
-    return chart
+InventoryPlot = make_plot_component(
+    {
+        f"total_{resource}":None
+        for resource in sd.resources
+    }
+)
 
 model1 = HospitalModel()
 renderer = SpaceRenderer(HospitalModel(n=5))
@@ -65,7 +61,7 @@ page = SolaraViz(
     model1,
     renderer,
     model_params=model_params,
-    components = [],
+    components = [InventoryPlot],
     name = "Hosp Resource Network"
 )
 

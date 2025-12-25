@@ -1,5 +1,6 @@
 from mesa.discrete_space import FixedAgent
 import random
+import numpy as np
 
 class State:
     normal = 0
@@ -9,7 +10,7 @@ class State:
 class HostpitalAgent(FixedAgent):
     """Hospital that has inventory, usage and requests things if its running low"""
 
-    def __init__(self, model,cell,usage,inventory,init_state,id):
+    def __init__(self, model,cell,usage,inventory,init_state):
         super().__init__(model)
         
         self.base_usage = usage
@@ -19,10 +20,11 @@ class HostpitalAgent(FixedAgent):
         self.emergency = False
         self.emergency_days = 0.0
         self.days_threshold = 3
+        self.lead_time = 2
         self.target_days = 7
         self.cell = cell
         self.state = init_state
-        self.id = id
+        # self.id = id
         
 
     def days_supply_remaining(self):
@@ -30,17 +32,23 @@ class HostpitalAgent(FixedAgent):
 
         for resource,usage in self.base_usage.items():
             expected_daily_usage = usage*self.emergency_multipliter
-            self.days_remaining[resource] = self.inventory[resource]/expected_daily_usage
+            self.days_remaining[resource] = np.ceil(self.inventory[resource]/expected_daily_usage)
 
     def request_resources(self):
         """Requests for resource if days of supply becomes less than threshold"""
         
         for resource,remaining in self.days_remaining.items():
             expected_daily_usage = self.base_usage[resource]*self.emergency_multipliter
-
-            if remaining < self.days_threshold and self.model.restock_interval>4:
+            # print(f"agent num: {self.unique_id} , resource: {resource}, days remaining: {remaining}")
+            if remaining < self.days_threshold+self.lead_time and self.model.restock_interval>4:
                 request_amt = (self.target_days - remaining)*expected_daily_usage
-                self.model.register_request(self.id,resource,request_amt)
+                self.model.register_request(
+                    self.unique_id,
+                    resource,
+                    request_amt,
+                    self.emergency
+                    )
+                # print(f"INFO: requesting resource {resource} amount: {request_amt}, days left: {remaining}")
 
     def update_emergency(self):
         """Update Emergency states"""
@@ -54,7 +62,7 @@ class HostpitalAgent(FixedAgent):
         """Consume resources daily"""
         if not self.emergency:
             emergency_chance = random.uniform(0.0,1.0)
-            if emergency_chance > 0.5:
+            if emergency_chance > 0.7:
                 self.emergency = True
 
                 self.emergency_multipliter = random.uniform(1.1,1.7)
@@ -68,7 +76,7 @@ class HostpitalAgent(FixedAgent):
     
     def step(self):
         """One time step in agent"""
-
+        # print(f"INFO: agent step for agent {self.unique_id}")
         self.consume_resources()
         self.update_emergency()
         self.days_supply_remaining()

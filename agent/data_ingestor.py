@@ -4,7 +4,7 @@ import pandas as pd
 from agent.core import State,llm_client,MODEL_NAME,SAVE_PATH
 from agent.utils import parse_model_res
 from google.genai import types
-from agent.data.generate_data import SyntheticData
+from agent.model.data.generate_data import SyntheticData
 
 
 def ingest_knowledge(state:State):

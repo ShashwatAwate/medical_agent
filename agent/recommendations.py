@@ -8,6 +8,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
 import numpy as np
 import datetime
+import random
+import pprint
 
 def apply_offsets(weights,offsets,alpha=0.8):
     for key in weights.keys():
@@ -23,42 +25,42 @@ def apply_offsets(weights,offsets,alpha=0.8):
 def rank_candidates(state: State):
     """From all transfers get top 3 potential transfers"""
     try:
-        candidates = prepare_candidates(state)
+        candidates = state['transfer_candidates']
+        # print(f"INFO: CANDIDATES \n\n {candidates}")
         print("INFO: Ranking Candidates")
         if candidates==[]:
             return []
-        w_cost = state["recommendation_weights"]["cost"]
-        w_coverage = state["recommendation_weights"]["coverage"]
-        w_fairness = state["recommendation_weights"]["fairness"]
-        w_urgency = state["recommendation_weights"]["urgency"]
         
+        nearby = []
+        mid = []
+        far = []
+        low_cap = []
+        high_cap = []
         for candidate in candidates:
-            short_hosp = candidate["short_hospital"]
-            providers = candidate["providers"]
-            shortage = candidate["shortage"]
-            available_surplus = 0
-            for provider in providers:
-                available_surplus += provider["quantity"] 
-            coverage_score = w_coverage*(min(shortage,available_surplus)/shortage)
-            fairness_score = w_fairness*(1 - abs(available_surplus - shortage)/(available_surplus+shortage))
-            severity_score = {"mild":1.05,"moderate":1.2,"severe":1.4,"critical":1.6}
-            urgency_score = w_urgency*(severity_score[state["report_data"]["severity"]])
-            distances = [state["distances"].loc[short_hosp,p["hospital"]] for p in providers]
-            avg_dist = np.mean(distances)
+            dist = candidate.get('distance',999)
+            capacity = candidate.get('amount',0)
+            if dist <= 100:
+                nearby.append(candidate)
+            elif dist > 100 and dist <= 300:
+                mid.append(candidate)
+            else:
+                far.append(candidate)
 
-            distances = [state["distances"].loc[short_hosp, p["hospital"]] for p in providers]
-            avg_dist = np.mean(distances)
-            max_dist = max(distances) if distances else 1
-            distance_score = w_cost * (1 - (avg_dist / max_dist))
-
-
-            score = distance_score + coverage_score + fairness_score + urgency_score
-            candidate["score"] = score
-
-        candidates.sort(key= lambda x: x["score"],reverse=True)
-
-        top_k = candidates[:min(3,len(candidates))]
-        return top_k
+            if capacity < 10:
+                low_cap.append(candidate)
+            else:
+                high_cap.append(candidate)
+        # print(f"INFO: HIGH LEVEL GROUPS \n\n {nearby} \n\n {mid} \n\n {far} \n\n {low_cap} \n\n {high_cap}")
+        plans = {
+            "nearest": nearby,
+            "max_coverage":nearby+mid,
+            "urgent": nearby+mid+far,
+            "minimal_impact":low_cap,
+            "high_impact":high_cap
+        }
+        
+        return {k:v for k,v in plans.items() if len(v)>0}
+    
     except Exception as e:
         print(f"ERROR: during ranking candidates: {str(e)}")
 
@@ -83,119 +85,62 @@ def decide_preferences(state:State):
 def llm_recommendation(state:State):
     print("INFO: LLM Recommendation started")
     try:
-        ranked_candidates = rank_candidates(state)
+        plans = rank_candidates(state)
         priorities = decide_preferences(state)
-        summary_lines = []
-        for cand in ranked_candidates:
-            short_hosp = cand["short_hospital"]
-            resource = cand["resource"]
-            shortage = cand["shortage"]
-            providers = cand["providers"]
-            shortage_stock = state["today_data"].loc[state["today_data"]["hospital"]==short_hosp,f"{resource}_stock"]
-            provider_strs = []
-            distances = []
-            for p in providers:
-                from_hos = p["hospital"]
-                qty = p["quantity"]
-                dist = state["distances"].loc[short_hosp, from_hos]
-                stock = state["today_data"].loc[state["today_data"]["hospital"]==from_hos,f"{resource}_stock"].values[0]
-                distances.append(dist)
-                provider_strs.append(f"{from_hos} ({int(qty)} units) (current stock(surplus hospital):{int(stock)})")
+        
 
-            avg_dist = round(np.mean(distances), 1)
-            summary_lines.append(
-                f"{', '.join(provider_strs)} -> {short_hosp} | {resource} | "
-                f"shortage: {int(shortage)} | avg distance: {avg_dist} km | shortage stock: {int(shortage_stock)}"
-            )
-
-        ranked_summary = "\n".join(summary_lines)
-
-        if isinstance(priorities,dict):
-            w_cost = priorities.get("cost")
-            w_coverage  = priorities.get("coverage")
-            w_fairness = priorities.get("fairness")
-            w_urgency= priorities.get("urgency")
-        else:
-            w_cost = "MEDIUM"
-            w_coverage  = "MEDIUM"
-            w_fairness = "MEDIUM"
-            w_urgency= "MEDIUM"
-
-        recommendation = state.get("recommendation","")
-        feedback = state.get("user_feedback","")
-        tracked_hospitals = list(state["tracking_hosps"])  
-        resource_names = state.get("resource_names",[])
+        # print(f"INFO: PLANS \n\n {plans}")
 
         llm_prompt = f"""
     You are a healthcare resource allocation assistant tasked with optimizing resource distribution across hospitals.
 
-    Your job: decide how to reallocate resources between hospitals based on forecasted shortages or surpluses.
+    Your job: decide how to reallocate resources between hospitals based on the given set of plans and then rank them based on given priorities.
 
-    Current preference weights (higher = more preferred):
-    - Cost Efficiency: {w_cost}
-    - Coverage: {w_coverage}
-    - Fairness: {w_fairness}
-    - Urgency: {w_urgency}
-
-    Here are selected candidate utilizations:
-    {ranked_summary}
-
-    This is the previous given recommendation:
-    {recommendation}
-
-    And this is the user feedback for that recommendation:
-    {feedback}
-
+    ---PRIORITIES START---
+    {priorities}
+    ---PRIORITIES END---
+   
     DO NOT give the same recommendation again.
-
-    **Important:** You must choose the resource name exactly as provided in this list: {resource_names}.
     Do not invent or modify any resource names. The casing must match exactly.
 
     ---
 
     **Your task:**
-    1. Identify hospitals facing *shortages* (high forecast values) and *surpluses* (low forecast values) **only among the tracked hospitals**.
-    2. Suggest **specific transfers** between tracked hospitals in plain text. 
-    3. Justify each recommendation using the 4 preference weights.
+    1. CAREFULLY go through the plans and their names.
+    2. RECOMMEND the transfers MOST FITTING the priorites given. 
+    3. JUSTIFY each recommendation based on the priorites.
 
     **Rules:**
-    1.Only give response in valid JSON format.
-    2.Give only a single recommendation.
-    3.Do not include additional text, abbreviations or salutations.
-    4.Do not show weights in your justification.
-    5.**You must only reference hospitals from this list: {tracked_hospitals}.**
-    6.**Never mention or invent hospitals that are not in the list.**
-    7.NEVER recommend transfer to the same hospital.
-    8.Round quantities to INTEGERS.
-    9.If there are no actionable imbalances between the tracked hospitals, clearly state that in the recommendation and justification fields.
-    10.**Do NOT provide multiple transfers or a list of transfers. Only ONE transfer should be included.**
-    11.**The "meta" field MUST be a single object, NOT a list or array.**
-    12. GIVE REALISTIC QUANTITIES, NEVER RECOMMEND TO NUMBERS MORE THAN OR EQUAL TO THE ENTIRE SURPLUS STOCK
-    13.The JSON must exactly match this structure (no extra keys):
+    1.ONLY give response in valid JSON format.
+    2.DO NOT include additional text, abbreviations or salutations.
+    3.DO NOT show weights in your justification.
+    4.NEVER mention or invent hospitals that are not in the plan.
+    5.Round quantities to INTEGERS.
+    6.If there are no actionable imbalances between the tracked hospitals, clearly state that in the recommendation and justification fields.
+    7.The JSON must exactly match this structure (no extra keys):
 
     **JSON Format:**
     {{
-      "recommendation": "<short plain sentence describing ONE transfer>",
+      "rank": <rank_number(lowest is most important)>,
       "justification": "<reasoning in 2 to 3 sentences>",
-      "meta": {{
-          "from": "[<hospital name>]",
-          "to": "<hospital name>",
-          "resource": "<resource name>",
-          "quantity": <integer>
-      }}
+      "plan_name": <key name of the plan>
     }}
+
+    ---PLANS START---
+    {plans}
+    ---PLANS END---
     """
         
         res = llm_client.models.generate_content(model=MODEL_NAME,contents=llm_prompt)
         res_dict = parse_model_res(res.text)
-        # print(f"INFO:RAW RES DICT \n {res_dict}")
+        print(f"INFO:RAW RES DICT \n")
+        pprint.pprint(res_dict,indent=4)
 
     except Exception as e:
         print(f"ERROR: during llm recommendation {str(e)}")
         print(f"type(e).__name__")
         return {}
     
-    return res_dict
 
 
 def build_recommendations(state: State):
@@ -212,7 +157,7 @@ def build_recommendations(state: State):
             print("WARN: No meta found in recommendations")
             state["recommendation"] = res_dict.get("recommendation", None)
             state["recommendation_justification"] = res_dict.get("justification", None)
-            state["recommendation_meta"] = None
+            
             return state
 
         # Ensure these are lists (even if only one hospital)

@@ -1,12 +1,15 @@
 import mesa
-from mesa.discrete_space import Network
+from mesa.discrete_space import Network,CellCollection
 import networkx as nx
 from .data.generate_data import SyntheticData
 import random
 from .agents import HostpitalAgent,State
+import numpy as np
+import uuid
 
 class HospitalModel(mesa.Model):
     steps=0
+
     def __init__(self,n=5,seed=None):
         super().__init__(seed=seed)
 
@@ -14,6 +17,7 @@ class HospitalModel(mesa.Model):
         self.num_agents = n
         
         self.requests = []
+        self.pending_transfers = []
         self.hosp_ids = list(range(self.num_agents))
         self.G = nx.Graph()
         self.G.add_nodes_from(self.hosp_ids)
@@ -23,15 +27,23 @@ class HospitalModel(mesa.Model):
                 if i<j:
                     self.G.add_edge(i,j,distance=random.randint(40,400))
         self.space = Network(self.G,capacity=1)
-        self.restock_interval = 14
-        self.days_threshold = 4
+        self.restock_interval = 3
+        self.days_threshold = 2
         self.base_stock_pct = 40
         self.min_dist_delay = {
             100: 0,
-            200: 1,
-            300: 2,
-            400: 3
+            200: 0,
+            300: 0,
+            400: 0
         }
+
+        self.datacollector = mesa.DataCollector(model_reporters={f"total_{resource}":
+                                                                 lambda m,r=resource: sum(
+                                                                     agent.inventory.get(r,0) for agent in m.agents
+                                                                 )for resource in self.sd.resources
+                                                                 },
+                                                agent_reporters={"Usage":"base_usage"})
+
         usages = []
         inventories = []
         self.current_requests = []
@@ -40,7 +52,11 @@ class HospitalModel(mesa.Model):
             usage,inventory = self.sd.generate_data()
             usages.append(usage)
             inventories.append(inventory)
-        HostpitalAgent.create_agents(self,n,list(self.space.all_cells),usage=usages,inventory=inventories,init_state=self.state.normal,id=list(range(0,n+1)))
+        HostpitalAgent.create_agents(self,n,list(self.space.all_cells),usage=usages,inventory=inventories,init_state=self.state.normal)
+
+        # for agent in self.agents:
+        #     print("agent.unique_id:", agent.unique_id, 
+        #   "cell node:", agent.cell.coordinate)
     
     def _max_donate(self,agent,resource):
         """In max, how much resource can a hospital donate"""
@@ -48,17 +64,24 @@ class HospitalModel(mesa.Model):
         min_stock = self.days_threshold*agent.base_usage.get(resource,0)
         return max(0,cur_stock-min_stock)
 
-    def register_request(self,hospital: int,resource: str,amount: float):
+    def register_request(self,hospital: int,resource: str,amount: float,emergency: bool):
         """Put requests from agents in a queue"""
 
-        self.requests.append({"hospital":hospital,"resource":resource,"amount":amount})
+        self.requests.append({"hospital":hospital,"resource":resource,"amount":amount,"emergency":bool})
     
     def handle_requests(self):
         """Handle requests in the request queue that arrive at a particular time"""
+        if len(self.requests) ==0:
+            # print("INFO: No requests yet")
+            return
+        
         for request in list(self.requests):
+            
             req_hosp = request.get("hospital","")
             req_resource = request.get("resource","")
             req_amt = request.get("amount",0)
+            emergency = request.get("emergency",False)
+            print(f"INFO: handling request from: {req_hosp}, resource: {req_resource}")
 
             self.requests.remove(request)
 
@@ -70,36 +93,55 @@ class HospitalModel(mesa.Model):
                 return
             
             amt_left = req_amt
+            req_agent = None
             for agent in self.agents:
+                if agent.unique_id==req_hosp:
+                    req_agent = agent
+                    break
+            for agent in self.agents:
+
                 if amt_left<=0:
                     break
-                if agent.id == req_hosp:
+                if agent.unique_id == req_hosp:
                     continue
                 if agent.days_remaining[req_resource] > self.days_threshold:
                     donatable = self._max_donate(agent,req_resource)
                     
-                    actual_donatable = min(donatable,req_amt)
-                    agent.inventory[req_resource] -= actual_donatable
-
-                    amt_left -= actual_donatable
-                    hosp_dist = self.G[req_hosp][agent.id]["distance"]
+                    actual_donatable = int(np.ceil(min(donatable,req_amt)))
+                    
                     min_delay = 0
+                    hosp_dist = self.G[req_agent.cell.coordinate][agent.cell.coordinate]["distance"]
                     for dist in self.min_dist_delay.keys():
                         if hosp_dist <=dist:
                             min_delay = self.min_dist_delay[dist]
-                    actual_delay = random.randint(0,self.days_threshold) + min_delay
 
+                    actual_delay = random.randint(0,self.days_threshold) + min_delay
                     if agent.days_remaining[req_resource] < actual_delay:
                         continue
-
-                    current_request = {
+                    
+                    transfer = {
+                        'id': uuid.uuid4(),
                         'req_hospital':req_hosp,
-                        'res_hospital':agent.id,
+                        'res_hospital':agent.unique_id,
                         'resource': req_resource,
                         'amount': actual_donatable,
-                        'delay': actual_delay
+                        'delay': actual_delay,
+                        'distance':hosp_dist,
+                        'emergency':emergency
                     }
-                    self.current_requests.append(current_request)
+                    self.pending_transfers.append(transfer)
+                    
+                    print(f"INFO: donor:{agent.unique_id}, amount: {actual_donatable}, delay: {actual_delay}")
+
+    # def apply_transfers(self,user_feedback:dict):
+    #     for transfer in self.pending_transfers:
+    #         if user_feedback.get('id') == transfer.get('id'):
+    #             for agent in self.agents:
+    #                 if agent.unique_id == transfer.get('res_hospital'):
+    #                     agent.inventory[transfer.get('resource')] -= transfer.get('acutal_donatable')
+    #                     self.current_requests.append(transfer)
+    #                     break
+                    
       
     def restock_supplies(self):
         """Restock supplies after an interval or requested supplies arrive"""
@@ -109,8 +151,9 @@ class HospitalModel(mesa.Model):
                 req_id = cur_req.get('req_hospital')
                 resource = cur_req.get('resource')
                 amt = cur_req.get('amount')
-                req_agent = self.agents[req_id]
-                req_agent.inventory[resource]+=amt
+                for agent in self.agents:
+                    if agent.unique_id == req_id:
+                        agent.inventory[resource]+=amt
 
                 self.current_requests.remove(cur_req)
             else:
@@ -118,16 +161,17 @@ class HospitalModel(mesa.Model):
 
         if self.restock_interval<=0:
             for agent in self.agents:
-                _,restock = self.sd.generate_data()
+                
                 for resource in agent.inventory.keys():
-                    agent.inventory[resource] += restock.get(resource,0)
+                    restock = agent.base_usage.get(resource,0)*14
+                    agent.inventory[resource] += restock
             self.restock_interval = 14
         else:
             self.restock_interval-=1
     
     def step(self):
         """A step in time"""
-        self.steps+=1
+        self.datacollector.collect(self)
         self.handle_requests()
         self.restock_supplies()
         self.agents.shuffle_do("step")

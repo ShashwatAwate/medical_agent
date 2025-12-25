@@ -21,7 +21,7 @@ class SyntheticData:
         for resource in self.resources:
             #randomly determine current stock for a resource and its base usage
             current_stock = random.randint(200,800)
-            base_usage = random.randint(0,current_stock-100)
+            base_usage = current_stock*random.uniform(0.03,0.08)
             resource_data[resource] = {"usage":base_usage,"stock" : current_stock}
         usage = {}
         inventory = {}
