@@ -1,31 +1,69 @@
-from agent.core import State,llm_client,MODEL_NAME
+from agent.core import State,llm_client,MODEL_NAME,PLAN_WEIGHT_MAP,NUM_PLANS,PLAN_CAPACITY
 from agent.utils import parse_model_res,index,model
 from agent.forecasting import prepare_candidates
 
 
 from sklearn.metrics.pairwise import cosine_similarity
 
+from collections import defaultdict
 import pandas as pd
 import numpy as np
 import datetime
 import random
 import pprint
 
-def apply_offsets(weights,offsets,alpha=0.8):
-    for key in weights.keys():
-        wt = weights[key]
-        offset = offsets[key]
-        wt += alpha*offset
-        wt = max(0,min(1,wt))
-        weights[key] = wt
-    
-    return weights
+def plan_summary(plans:dict):
+    """Summarize plans for the llm to recommend"""
+    try:
+        plan_summary = {}
+        for plan_name in plans.keys():
+            transfers = plans[plan_name]
+            requesting_hospitals = set()
+            responding_hospitals = set()
+            dists = []
+            resource_stats = defaultdict(lambda : {"total":0,"count":0})
+            under_emergency = 0
+            for transfer in transfers:
+                dist = transfer.get('distance')
+                req_hospital = transfer.get('req_hospital')
+                res_hospital = transfer.get('res_hospital')
+                resource = transfer.get('resource')
+                amount = transfer.get('amount')
+                emergency = transfer.get('emergency')
 
+                requesting_hospitals.add(req_hospital)
+                responding_hospitals.add(res_hospital)
+                dists.append(dist)
+                resource_stats[resource]["total"] += amount
+                resource_stats[resource]["count"] += 1
+
+                if emergency=='Yes':
+                    under_emergency += 1
+
+            avg_dist = np.mean(dists)
+            avg_amt = {}
+            for res,stats in resource_stats.items():
+                avg = resource_stats[res]["total"]/resource_stats[res]["count"]
+                avg_amt[res] = avg
+            summary = {
+                f"Requesting hospital ids : {list(requesting_hospitals)}",
+                f"Responding hospital ids : {list(responding_hospitals)}",
+                f"Resource distribution: {avg_amt}",
+                f"Average Distance between hospitals: {avg_dist}",
+                f"Hospitals under emergency: {under_emergency}"
+            }
+            plan_summary[plan_name] = summary
+
+        return plan_summary
+    except Exception as e:
+        print(f"ERROR: during making summaries for plans : {str(e)}")
 
 def rank_candidates(state: State):
     """From all transfers get top 3 potential transfers"""
     try:
         candidates = state['transfer_candidates']
+        if len(candidates)==0:
+            return {}
         # print(f"INFO: CANDIDATES \n\n {candidates}")
         print("INFO: Ranking Candidates")
         if candidates==[]:
@@ -36,6 +74,7 @@ def rank_candidates(state: State):
         far = []
         low_cap = []
         high_cap = []
+
         for candidate in candidates:
             dist = candidate.get('distance',999)
             capacity = candidate.get('amount',0)
@@ -51,6 +90,12 @@ def rank_candidates(state: State):
             else:
                 high_cap.append(candidate)
         # print(f"INFO: HIGH LEVEL GROUPS \n\n {nearby} \n\n {mid} \n\n {far} \n\n {low_cap} \n\n {high_cap}")
+        nearby = nearby[:PLAN_CAPACITY]
+        mid = mid[:PLAN_CAPACITY]
+        far = far[:PLAN_CAPACITY]
+        low_cap= low_cap[:PLAN_CAPACITY]
+        high_cap = high_cap[:PLAN_CAPACITY]
+
         plans = {
             "nearest": nearby,
             "max_coverage":nearby+mid,
@@ -58,8 +103,9 @@ def rank_candidates(state: State):
             "minimal_impact":low_cap,
             "high_impact":high_cap
         }
-        
-        return {k:v for k,v in plans.items() if len(v)>0}
+        state['plans'] = plans
+        summary = plan_summary(plans)
+        return summary
     
     except Exception as e:
         print(f"ERROR: during ranking candidates: {str(e)}")
@@ -88,6 +134,9 @@ def llm_recommendation(state:State):
         plans = rank_candidates(state)
         priorities = decide_preferences(state)
         
+        if not plans:
+            state['model_recommendations'] = {}
+            return state
 
         # print(f"INFO: PLANS \n\n {plans}")
 
@@ -107,8 +156,9 @@ def llm_recommendation(state:State):
 
     **Your task:**
     1. CAREFULLY go through the plans and their names.
-    2. RECOMMEND the transfers MOST FITTING the priorites given. 
+    2. RECOMMEND the plans MOST FITTING the priorites given. 
     3. JUSTIFY each recommendation based on the priorites.
+    4. DO NOT DIVIDE TRANSFERS INSIDE THE PLANS, RECOMMEND ENTIRE PLANS
 
     **Rules:**
     1.ONLY give response in valid JSON format.
@@ -117,7 +167,8 @@ def llm_recommendation(state:State):
     4.NEVER mention or invent hospitals that are not in the plan.
     5.Round quantities to INTEGERS.
     6.If there are no actionable imbalances between the tracked hospitals, clearly state that in the recommendation and justification fields.
-    7.The JSON must exactly match this structure (no extra keys):
+    7.Base your response ONLY on user's priorities, DO NOT add your own thinking to rank a plan, ONLY rank BASED ON THE PRIORITIES.
+    8.The JSON must exactly match this structure (no extra keys):
 
     **JSON Format:**
     {{
@@ -133,132 +184,119 @@ def llm_recommendation(state:State):
         
         res = llm_client.models.generate_content(model=MODEL_NAME,contents=llm_prompt)
         res_dict = parse_model_res(res.text)
-        print(f"INFO:RAW RES DICT \n")
-        pprint.pprint(res_dict,indent=4)
-
+        # print(f"INFO:RAW RES DICT \n")
+        # pprint.pprint(res_dict,indent=4)
+        state['model_recommendations'] = res_dict
+        return state
+    
     except Exception as e:
         print(f"ERROR: during llm recommendation {str(e)}")
         print(f"type(e).__name__")
         return {}
+
+def show_recommendations(state: State):
+    """Show recommendations"""
+    recommendations = state['model_recommendations']
+
+    if not recommendations:
+        print("Nothing to recommend")
+        return
     
+    sorted(recommendations,key=lambda x:x['rank'] )
 
+    for rec in recommendations:
 
-def build_recommendations(state: State):
-    """Based on the current data and forecasts and previous user interactions, build the recommendations"""
-    try:
-        print("INFO: Building recommendations")
-        res_dict = llm_recommendation(state)
-        # print("INFO:", type(res_dict), res_dict)
+        rank = rec.get('rank')
+        plan_name = rec.get('plan_name')
+        justification = rec.get('justification')
+        plans = state['plans']
+        plan = plans.get(plan_name)
 
-        today_df = state["today_data"]
-        res_meta = res_dict.get("meta", None)
-
-        if not res_meta:
-            print("WARN: No meta found in recommendations")
-            state["recommendation"] = res_dict.get("recommendation", None)
-            state["recommendation_justification"] = res_dict.get("justification", None)
+        print(rank)
+        print(plan_name)
+        print(justification)
+        for transfer in plan:
+            req_hosp = transfer.get('req_hospital')
+            res_hosp = transfer.get('res_hospital')
+            resource = transfer.get('resource')
+            amount = transfer.get('amount')
+            delay = transfer.get('delay')
+            distance = transfer.get('distance')
             
-            return state
+            printStr = (
+                f"Requesting Hospital: {req_hosp} "
+                f"Responding Hospital: {res_hosp} "
+                f"Resource: {resource} "
+                f"Amount: {amount} "
+                f"Estimated Delay: {delay}"
+                f"Distance: {distance}"
+            )
+            print(printStr)
 
-        # Ensure these are lists (even if only one hospital)
-        from_hosp = res_meta.get("from", [])
-        to_hosp = res_meta.get("to", [])
-        resource = res_meta.get("resource", "")
+        print("\n")
 
-        if isinstance(from_hosp, str):
-            from_hosp = [from_hosp]
-        if isinstance(to_hosp, str):
-            to_hosp = [to_hosp]
+def update_weights(state:State,reward:float):
+    """Update preference weights"""
+    lr = 0.05
+    weights = state['recommendation_weights']
 
-        # Filter using isin()
-        from_df = today_df[today_df["hospital"].isin(from_hosp)]
-        to_df = today_df[today_df["hospital"].isin(to_hosp)]
-
-        from_stock_val = from_df[f"{resource}_stock"].values
-        from_usage_val = from_df[f"{resource}_usage"].values
-
-        to_stock_val = to_df[f"{resource}_stock"].values
-        to_usage_val = to_df[f"{resource}_usage"].values
-
-        print(f"FROM hospitals: {from_hosp}")
-        print(f"TO hospitals: {to_hosp}")
-        print(f"from usage: {from_usage_val} | stock: {from_stock_val}")
-        print(f"to usage: {to_usage_val} | stock: {to_stock_val}")
-
-        state["recommendation"] = res_dict.get("recommendation", "")
-        state["recommendation_justification"] = res_dict.get("justification", "")
-        state["recommendation_meta"] = res_meta
-
-    except Exception as e:
-        print(f"ERROR: during recommending things {str(e)}")
-        print(f"{type(e).__name__}")
-
-    return state
+    for key,val in weights.items():
+        weights[key] = weights[key] + lr*reward*PLAN_WEIGHT_MAP.get(key,0.0)
+    
+    state['recommendation_weights'] = weights
 
 
-def get_feedback(state: State,approval:bool,transfer_vals:dict = {},reason:str = ""):
-    """Adjusts weights based on feedback"""
 
-    try:
+def get_feedback(state: State):
+    """Get user feedback" and adjust weights"""
+    recommendations = state["model_recommendations"]
+    if not recommendations:
+        print("Nothing to get feedback on")
+        return []
+    
+    plans = state['plans']
+    reward = 0
+    
+    for rec in recommendations:
+        plan_name = rec.get('plan_name')
+        rank = rec.get('rank')
+        plan = plans.get(plan_name)
 
-        print(f"Before update: {state["recommendation_weights"]}")
-        if approval:
-            for weight in state["recommendation_weights"].keys():
-                state["recommendation_weights"][weight] += 0.02
-            meta = state.get("recommendation_meta")
-            if isinstance(meta,dict) and meta.get("resource"):
-                resource = meta.get("resource","")
-                from_hos = meta.get("from", [])
-                to_hos = meta.get("to", [])
-                for fh in from_hos:
-                    qty = transfer_vals.get((fh,to_hos),meta.get("quantity",0))
-                    print(f"INFO: for {resource} qty is {qty}")
-                    today_df = state["today_data"]
+        accepted_transfers = [] #storing transfers to be applied to the Mesa Model
 
-                    today_df.loc[today_df["hospital"]== fh,f"{resource}_stock"] -= qty
-                    today_df.loc[today_df["hospital"]==to_hos,f"{resource}_stock"] += qty
+        print(f"Enter feedback for plan {plan_name}")
+        isAccept = int(input('Accept(1)/Reject(0)\n'))
+        if isAccept==1:
+            reward = (NUM_PLANS-rank)/NUM_PLANS
+            for transfer in plan:
 
-                state["tracking_data"] = pd.concat([state["tracking_data"],today_df])
-                recent_dates = sorted(state["tracking_data"]["date"].unique())[-14:]
-                state["tracking_data"] = state["tracking_data"][state["tracking_data"]["date"].isin(recent_dates)]
+                id = transfer.get('id')
+                req_hosp = transfer.get('req_hospital')
+                res_hosp = transfer.get('res_hospital')
+                resource = transfer.get('resource')
+                amount = transfer.get('amount')
+                delay = transfer.get('delay')
+                distance = transfer.get('distance')
+                
+                printStr = (
+                    f"Requesting Hospital: {req_hosp} "
+                    f"Responding Hospital: {res_hosp} "
+                    f"Resource: {resource} "
+                    f"Amount: {amount} "
+                    f"Estimated Delay: {delay}"
+                    f"Distance: {distance}"
+                )
 
-                state["today_data"] = today_df
+                print(printStr)
+
+                choice = int(input("Accept(1)/Reject(0)\n"))
+                if choice==1:
+                    accepted_transfers.append(id)
+                    pass
+            break
         else:
-            concepts = {
-            "cost": "concerns about expenses, distance, or transportation costs",
-            "coverage": "ensuring enough resources are available across all hospitals or regions",
-            "fairness": "equal distribution, fairness, or resource equity among hospitals",
-            "urgency": "emergency, immediate need, or life-critical situations"
-            }
-
-            concept_embs = {k: model.encode(v,normalize_embeddings=True) for k,v in concepts.items()}
-            feedback_emb = model.encode(reason,normalize_embeddings=True).reshape(1,-1)
-            justification_emb = model.encode(state["recommendation_justification"],normalize_embeddings=True).reshape(1,-1)
-
-
-            delta_max = 0.1
-            for concept,emb in concept_embs.items():
-                feedback_sim = cosine_similarity(feedback_emb,emb.reshape(1,-1))[0][0]
-                justification_sim = cosine_similarity(justification_emb, emb.reshape(1,-1))[0][0]
-                print(f"INFO: feedback_sim: {feedback_sim}, justification_sim:{justification_sim}")
-                sim = 0.4*feedback_sim + 0.6*justification_sim
-                print(f"INFO: overall sim: {sim}")
-
-                offset = 0
-                offset = (max(sim,0.08) - 0.08)/(0.6)*delta_max
-                print(f"INFO: offset: {offset}")
-                state["recommendation_weights"][concept] -= float(offset)
-
-
-        print(f"After update: {state["recommendation_weights"]}")
-        print(f"INFO: days since last update(feedback): {state["days_since_update"]}")
-        state["sim_date"] += datetime.timedelta(days=1)
-        state["days_since_update"]+=1
-        print(state["tracking_data"]["hospital"].unique())
-
-    except Exception as e:
-        print(f"ERROR: during feedback func {str(e)}")
-        print(f"{type(e).__name__}")
-
-    return state
+            reward = -(NUM_PLANS - rank + 1)/NUM_PLANS
+        
+        update_weights(state,reward)
+    return accepted_transfers
     

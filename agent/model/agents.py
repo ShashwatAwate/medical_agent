@@ -42,11 +42,14 @@ class HostpitalAgent(FixedAgent):
             # print(f"agent num: {self.unique_id} , resource: {resource}, days remaining: {remaining}")
             if remaining < self.days_threshold+self.lead_time and self.model.restock_interval>4:
                 request_amt = (self.target_days - remaining)*expected_daily_usage
+                is_emergency = 'No'
+                if self.emergency:
+                    is_emergency = 'Yes'
                 self.model.register_request(
                     self.unique_id,
                     resource,
                     request_amt,
-                    self.emergency
+                    is_emergency
                     )
                 # print(f"INFO: requesting resource {resource} amount: {request_amt}, days left: {remaining}")
 

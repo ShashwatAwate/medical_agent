@@ -80,7 +80,7 @@ class HospitalModel(mesa.Model):
             req_hosp = request.get("hospital","")
             req_resource = request.get("resource","")
             req_amt = request.get("amount",0)
-            emergency = request.get("emergency",False)
+            emergency = request.get("emergency","No")
             print(f"INFO: handling request from: {req_hosp}, resource: {req_resource}")
 
             self.requests.remove(request)
@@ -133,15 +133,28 @@ class HospitalModel(mesa.Model):
                     
                     print(f"INFO: donor:{agent.unique_id}, amount: {actual_donatable}, delay: {actual_delay}")
 
-    # def apply_transfers(self,user_feedback:dict):
-    #     for transfer in self.pending_transfers:
-    #         if user_feedback.get('id') == transfer.get('id'):
-    #             for agent in self.agents:
-    #                 if agent.unique_id == transfer.get('res_hospital'):
-    #                     agent.inventory[transfer.get('resource')] -= transfer.get('acutal_donatable')
-    #                     self.current_requests.append(transfer)
-    #                     break
-                    
+    def apply_transfers(self,user_feedback:list):
+        """Applying approved transfers"""
+
+        try:
+            
+            if not user_feedback:
+                self.pending_transfers = []
+                return
+            
+            final_transfers = [t for t in self.pending_transfers if t['id'] in user_feedback] # transfers which are not applied AND are approved by user
+
+            for transfer in final_transfers:
+                for agent in self.agents:
+                    if agent.unique_id == transfer.get('res_hospital'):
+                        agent.inventory[transfer.get('resource')] -= transfer.get('amount')
+                        self.current_requests.append(transfer)
+                        break
+
+            self.pending_transfers = []
+        except Exception as e:
+            print(f"ERROR: in applying transfers: {str(e)}")
+                
       
     def restock_supplies(self):
         """Restock supplies after an interval or requested supplies arrive"""
