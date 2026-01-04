@@ -1,6 +1,5 @@
 from agent.core import State,llm_client,MODEL_NAME,PLAN_WEIGHT_MAP,NUM_PLANS,PLAN_CAPACITY
-from agent.utils import parse_model_res,index,model
-from agent.forecasting import prepare_candidates
+from agent.utils import parse_model_res
 
 
 from sklearn.metrics.pairwise import cosine_similarity
